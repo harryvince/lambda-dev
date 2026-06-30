@@ -1,0 +1,46 @@
+[tools]
+node = "26.4.0"
+bun = "1.3.14"
+
+[tasks.install]
+description = "Install dependencies with Bun."
+run = "bun install"
+
+[tasks.typecheck]
+description = "Typecheck the TypeScript project."
+run = "bun run typecheck"
+
+[tasks.test]
+description = "Run the test suite with Bun."
+run = "bun run test"
+
+[tasks.build]
+description = "Build the TypeScript package."
+run = "bun run build"
+
+[tasks.check]
+description = "Run typecheck, tests, and build with Bun."
+depends = ["typecheck", "test", "build"]
+
+[tasks.clean]
+description = "Remove generated package artifacts."
+run = "bun run clean"
+
+[tasks.pack]
+description = "Build and create an npm package tarball without publishing."
+depends = ["build"]
+run = "bun pm pack"
+
+[tasks."publish:dry-run"]
+description = "Build and run an npm publish dry run without publishing."
+depends = ["build"]
+run = "npm publish --dry-run"
+
+[tasks.publish]
+description = "Build and publish the package to npm using external npm auth."
+depends = ["build"]
+run = "bun publish"
+
+[tasks.version]
+description = "Runs standard-version and tags the repo"
+run = "bunx standard-version"

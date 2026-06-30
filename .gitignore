@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.lambda-dev/
+coverage/
+*.log
+.DS_Store
+lambda-dev-*.tgz
