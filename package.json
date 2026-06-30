@@ -1,9 +1,7 @@
 {
   "name": "lambda-dev",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Hot-reload, deploy, and invoke existing AWS Lambda functions from a YAML-configured local workflow.",
-  "type": "module",
-  "packageManager": "bun@1.3.14",
   "bin": {
     "lambda-dev": "dist/cli.js"
   },
@@ -12,9 +10,7 @@
     "README.md",
     "examples"
   ],
-  "engines": {
-    "node": ">=20"
-  },
+  "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
     "check": "bun run typecheck && bun run test && bun run build",
@@ -38,5 +34,9 @@
     "@types/node": "26.0.1",
     "typescript": "6.0.3",
     "vitest": "4.1.9"
-  }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "bun@1.3.14"
 }
