@@ -1,6 +1,6 @@
 {
   "name": "aws-lambda-dev",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hot-reload, deploy, and invoke existing AWS Lambda functions from a YAML-configured local workflow.",
   "bin": {
     "aws-lambda-dev": "dist/cli.js"
