@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { deployTarget, invokeTarget, validateTarget } from "./core.js";
@@ -10,7 +10,10 @@ import { watchTarget } from "./watch.js";
 export function createProgram(): Command {
   const program = new Command();
 
-  program.name("aws-lambda-dev").description("Hot-reload, deploy, and invoke existing AWS Lambda functions.").version("1.0.2");
+  program
+    .name("aws-lambda-dev")
+    .description("Hot-reload, deploy, and invoke existing AWS Lambda functions.")
+    .version(readPackageVersionSyncFallback());
 
   program
     .command("init")
@@ -106,5 +109,17 @@ function isCliEntrypoint(argvPath: string | undefined): boolean {
     return import.meta.url === pathToFileURL(realpathSync(argvPath)).href;
   } catch {
     return import.meta.url === pathToFileURL(argvPath).href;
+  }
+}
+
+function readPackageVersionSyncFallback(): string {
+  // Commander needs the version during program construction. Keep this fallback
+  // tiny so release versioning remains owned by package.json and mise.
+  const packageUrl = new URL("../package.json", import.meta.url);
+  try {
+    const packageJson = JSON.parse(readFileSync(packageUrl, "utf8")) as { version?: unknown };
+    return typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
+  } catch {
+    return "0.0.0";
   }
 }

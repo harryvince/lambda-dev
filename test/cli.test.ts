@@ -34,6 +34,18 @@ describe("cli", () => {
     expect(stdout).toContain("Hot-reload, deploy, and invoke existing AWS Lambda functions.");
     expect(stdout).toContain("watch");
   });
+
+  it("prints the package version from package.json", async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
+
+    await execFileAsync("bun", ["run", "build"]);
+    const { stdout } = await execFileAsync("node", ["dist/cli.js", "--version"]);
+
+    expect(stdout.trim()).toBe(packageJson.version);
+  });
 });
 
 async function writeConfig(): Promise<string> {

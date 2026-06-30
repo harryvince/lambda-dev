@@ -16,7 +16,7 @@ export interface WatchOptions {
 
 export async function watchTarget(options: WatchOptions): Promise<Pick<FSWatcher, "on" | "close">> {
   const loaded = await loadTarget(options.configPath, options.targetName);
-  const include = loaded.target.watch.include.map((pattern) => path.resolve(loaded.projectRoot, pattern));
+  const watchPlan = createWatchPlan(loaded.projectRoot, loaded.target.watch.include, loaded.target.watch.exclude);
   const watcherFactory = options.watchFactory ?? ((paths, watchOptions) => chokidar.watch(paths, watchOptions));
   const runner = new SerializedDebouncedRunner(loaded.target.watch.debounceMs, async () => {
     await deployTarget({
@@ -27,18 +27,114 @@ export async function watchTarget(options: WatchOptions): Promise<Pick<FSWatcher
     });
   });
 
-  const watcher = watcherFactory(include, {
-    ignored: loaded.target.watch.exclude.map((pattern) => path.resolve(loaded.projectRoot, pattern)),
+  const watcher = watcherFactory(watchPlan.roots, {
+    ignored: (filePath) => watchPlan.isIgnored(filePath),
     ignoreInitial: true
   });
 
   watcher.on("all", (_event, filePath) => {
+    if (!watchPlan.shouldHandle(filePath)) {
+      return;
+    }
+
     logStep(options.logger, loaded.targetName, "watch", `Change detected ${filePath}`);
     runner.schedule().catch((error) => options.logger.error(formatError(error)));
   });
 
   logStep(options.logger, loaded.targetName, "watch", `Watching ${loaded.target.watch.include.join(", ")}`);
   return watcher;
+}
+
+export interface WatchPlan {
+  roots: string[];
+  shouldHandle(filePath: string): boolean;
+  isIgnored(filePath: string): boolean;
+}
+
+export function createWatchPlan(projectRoot: string, includes: string[], excludes: string[]): WatchPlan {
+  const normalizedRoot = path.resolve(projectRoot);
+  const includeMatchers = includes.map((pattern) => createMatcher(pattern));
+  const excludeMatchers = excludes.map((pattern) => createMatcher(pattern));
+  const roots = Array.from(
+    new Set(includes.map((pattern) => path.resolve(normalizedRoot, getWatchRoot(pattern))).sort())
+  );
+
+  return {
+    roots: roots.length > 0 ? roots : [normalizedRoot],
+    shouldHandle(filePath: string): boolean {
+      const relativePath = toRelativeUnixPath(normalizedRoot, filePath);
+      return includeMatchers.some((matches) => matches(relativePath)) && !excludeMatchers.some((matches) => matches(relativePath));
+    },
+    isIgnored(filePath: string): boolean {
+      const relativePath = toRelativeUnixPath(normalizedRoot, filePath);
+      return excludeMatchers.some((matches) => matches(relativePath));
+    }
+  };
+}
+
+function getWatchRoot(pattern: string): string {
+  const unixPattern = toUnixPath(pattern);
+  const wildcardIndex = unixPattern.search(/[*[{?]/);
+  const stablePrefix = wildcardIndex === -1 ? unixPattern : unixPattern.slice(0, wildcardIndex);
+  const directory = stablePrefix.endsWith("/") ? stablePrefix.slice(0, -1) : path.posix.dirname(stablePrefix);
+
+  if (!directory || directory === ".") {
+    return ".";
+  }
+
+  return directory;
+}
+
+function createMatcher(pattern: string): (relativePath: string) => boolean {
+  const normalizedPattern = toUnixPath(pattern).replace(/^\.\/+/, "");
+  const regex = globToRegExp(normalizedPattern);
+  return (relativePath: string) => regex.test(relativePath);
+}
+
+function globToRegExp(pattern: string): RegExp {
+  let source = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    const next = pattern[index + 1];
+
+    if (char === "*" && next === "*") {
+      const afterNext = pattern[index + 2];
+      if (afterNext === "/") {
+        source += "(?:.*/)?";
+        index += 2;
+      } else {
+        source += ".*";
+        index += 1;
+      }
+      continue;
+    }
+
+    if (char === "*") {
+      source += "[^/]*";
+      continue;
+    }
+
+    if (char === "?") {
+      source += "[^/]";
+      continue;
+    }
+
+    source += escapeRegExp(char);
+  }
+
+  return new RegExp(`${source}$`);
+}
+
+function escapeRegExp(char: string): string {
+  return /[\\^$.*+?()[\]{}|]/.test(char) ? `\\${char}` : char;
+}
+
+function toRelativeUnixPath(projectRoot: string, filePath: string): string {
+  return toUnixPath(path.relative(projectRoot, path.resolve(filePath)));
+}
+
+function toUnixPath(value: string): string {
+  return value.split(path.sep).join("/");
 }
 
 export class SerializedDebouncedRunner {

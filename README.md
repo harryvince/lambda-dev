@@ -46,11 +46,12 @@ Publishing tasks are defined in `mise.toml`. They use the npm-compatible package
 
 ```bash
 mise run pack
+mise run version
 mise run publish:dry-run
 mise run publish
 ```
 
-Run `publish:dry-run` before the real publish task.
+Run `mise run version` before publish tasks so release versioning is handled by the configured release workflow, then run `publish:dry-run` before the real publish task.
 
 ## Config
 
