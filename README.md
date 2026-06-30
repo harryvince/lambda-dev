@@ -1,6 +1,6 @@
-# lambda-dev
+# aws-lambda-dev
 
-`lambda-dev` is a local developer CLI for existing AWS Lambda functions. It watches source files, bundles a Node.js Lambda with esbuild, uploads the generated zip to AWS Lambda, and can invoke the function after each successful deploy.
+`aws-lambda-dev` is a local developer CLI for existing AWS Lambda functions. It watches source files, bundles a Node.js Lambda with esbuild, uploads the generated zip to AWS Lambda, and can invoke the function after each successful deploy.
 
 ## Quick Start
 
@@ -8,16 +8,18 @@
 mise install
 mise run install
 mise run build
-bunx lambda-dev init
+bunx aws-lambda-dev init
 ```
 
 Edit `lambda-dev.yml` so `functionName`, `region`, and `build.entry` point at an existing non-production Lambda.
 
 ```bash
-bunx lambda-dev validate
-bunx lambda-dev deploy dev --invoke
-bunx lambda-dev watch dev
+bunx aws-lambda-dev validate
+bunx aws-lambda-dev deploy dev --invoke
+bunx aws-lambda-dev watch dev
 ```
+
+The npm package and installed command are both named `aws-lambda-dev`.
 
 ## Development
 
@@ -87,11 +89,11 @@ Do not put AWS access keys, secrets, or production-only payloads in this file. T
 ## Commands
 
 ```bash
-lambda-dev init [--config lambda-dev.yml]
-lambda-dev validate [target] [--config lambda-dev.yml]
-lambda-dev deploy [target] [--config lambda-dev.yml] [--invoke]
-lambda-dev invoke [target] [--config lambda-dev.yml] [--payload-file event.json]
-lambda-dev watch [target] [--config lambda-dev.yml]
+aws-lambda-dev init [--config lambda-dev.yml]
+aws-lambda-dev validate [target] [--config lambda-dev.yml]
+aws-lambda-dev deploy [target] [--config lambda-dev.yml] [--invoke]
+aws-lambda-dev invoke [target] [--config lambda-dev.yml] [--payload-file event.json]
+aws-lambda-dev watch [target] [--config lambda-dev.yml]
 ```
 
 ## Minimum IAM Permissions

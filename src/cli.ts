@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { deployTarget, invokeTarget, validateTarget } from "./core.js";
@@ -9,7 +10,7 @@ import { watchTarget } from "./watch.js";
 export function createProgram(): Command {
   const program = new Command();
 
-  program.name("lambda-dev").description("Hot-reload, deploy, and invoke existing AWS Lambda functions.").version("0.1.0");
+  program.name("aws-lambda-dev").description("Hot-reload, deploy, and invoke existing AWS Lambda functions.").version("1.0.2");
 
   program
     .command("init")
@@ -92,6 +93,18 @@ export async function main(argv = process.argv): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isCliEntrypoint(process.argv[1])) {
   await main();
+}
+
+function isCliEntrypoint(argvPath: string | undefined): boolean {
+  if (!argvPath) {
+    return false;
+  }
+
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(argvPath)).href;
+  } catch {
+    return import.meta.url === pathToFileURL(argvPath).href;
+  }
 }

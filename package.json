@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Hot-reload, deploy, and invoke existing AWS Lambda functions from a YAML-configured local workflow.",
   "bin": {
-    "lambda-dev": "dist/cli.js"
+    "aws-lambda-dev": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
     "check": "bun run typecheck && bun run test && bun run build",
-    "clean": "rm -rf dist .lambda-dev lambda-dev-*.tgz",
+    "clean": "rm -rf dist .lambda-dev lambda-dev-*.tgz aws-lambda-dev-*.tgz",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"

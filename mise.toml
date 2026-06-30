@@ -43,4 +43,4 @@ run = "bun publish"
 
 [tasks.version]
 description = "Runs standard-version and tags the repo"
-run = "bunx standard-version"
+run = "bunx standard-version && git push && git push --tags"
