@@ -2,12 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-## Unreleased
+## [1.2.0](https://github.com/harryvince/lambda-dev/compare/v1.1.0...v1.2.0) (2026-10-15)
+
 
 ### Features
 
-- Add per-target YAML environment patches for Lambda deploy/watch, preserving unrelated variables and supporting explicit null deletion, revision-guarded updates, and bounded completion waits.
-
+* support Lambda environment variable updates ([e93ddb1](https://github.com/harryvince/lambda-dev/commit/e93ddb1136ce8edc30eddcc9c741701436951b65))
 
 ## [1.1.0](https://github.com/harryvince/lambda-dev/compare/v1.0.2...v1.1.0) (2026-10-15)
 
