@@ -2,12 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-## Unreleased
+## [1.1.0](https://github.com/harryvince/lambda-dev/compare/v1.0.2...v1.1.0) (2026-10-15)
+
 
 ### Features
 
-- Add YAML `build.copy` entries for runtime files, directories, and globs, including binary contents and executable permissions in Lambda ZIPs.
-- Support YAML mapping merges (`<<`) alongside anchors and aliases for shared target settings.
+* implement copy-plugin from eslint ([c2f33c8](https://github.com/harryvince/lambda-dev/commit/c2f33c8eec4d116b7e9829c44a41d6d07c213891))
 
 ### [1.0.2](https://github.com/harryvince/lambda-dev/compare/v1.0.1...v1.0.2) (2026-06-30)
 
