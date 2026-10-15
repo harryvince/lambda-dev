@@ -1,9 +1,10 @@
-import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import AdmZip from "adm-zip";
 import { build as esbuild } from "esbuild";
-import { LambdaDevError, toLambdaDevError } from "./errors.js";
+import { toLambdaDevError } from "./errors.js";
 import type { LoadedTarget } from "./config.js";
+import { createCopyManifest } from "./copy.js";
 
 export interface BuildResult {
   artifactPath: string;
@@ -19,6 +20,7 @@ export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> 
   const artifactPath = path.join(outDir, "function.zip");
 
   try {
+    const assets = await createCopyManifest(loaded);
     await rm(outDir, { recursive: true, force: true });
     await mkdir(outDir, { recursive: true });
 
@@ -32,7 +34,7 @@ export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> 
       minify: loaded.target.build.minify,
       external: loaded.target.build.external,
       define: loaded.target.build.define,
-      outfile: bundlePath
+      outfile: bundlePath,
     });
 
     const zip = new AdmZip();
@@ -43,13 +45,31 @@ export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> 
       zip.addLocalFile(sourceMapPath, "", "index.js.map");
     }
 
+    for (const asset of assets) {
+      const destination = path.join(outDir, asset.destination);
+      if (asset.directory) {
+        await mkdir(destination, { recursive: true });
+        zip.addFile(`${asset.destination}/`, Buffer.alloc(0), "", asset.mode & 0o777);
+      } else {
+        await mkdir(path.dirname(destination), { recursive: true });
+        await copyFile(asset.source, destination);
+        await chmod(destination, asset.mode & 0o777);
+        zip.addFile(asset.destination, await readFile(destination), "", asset.mode & 0o777);
+      }
+    }
+
+    // Apply directory modes after writing children so read-only sources can be copied too.
+    for (const asset of assets.filter((asset) => asset.directory).reverse()) {
+      await chmod(path.join(outDir, asset.destination), asset.mode & 0o777);
+    }
+
     zip.writeZip(artifactPath);
     const artifactBytes = await readFile(artifactPath);
     return {
       artifactPath,
       artifactBytes,
       sizeBytes: artifactBytes.byteLength,
-      durationMs: Date.now() - started
+      durationMs: Date.now() - started,
     };
   } catch (error) {
     throw toLambdaDevError("build", `Build failed for target ${loaded.targetName}`, error);

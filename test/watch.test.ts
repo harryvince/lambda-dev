@@ -31,7 +31,7 @@ describe("SerializedDebouncedRunner", () => {
       () =>
         new Promise<void>((resolve) => {
           releaseFirstRun = resolve;
-        })
+        }),
     );
     operation.mockResolvedValueOnce(undefined);
     const runner = new SerializedDebouncedRunner(1, operation);
@@ -88,7 +88,7 @@ targets:
       exclude:
         - .lambda-dev/**
       debounceMs: 1
-`
+`,
     );
 
     const watcher = new EventEmitter() as EventEmitter & { close: () => Promise<void> };
@@ -97,18 +97,18 @@ targets:
       artifactPath: path.join(root, "function.zip"),
       artifactBytes: new Uint8Array([1]),
       sizeBytes: 1,
-      durationMs: 1
+      durationMs: 1,
     });
     const lambda: LambdaAdapter = {
       updateFunctionCode: vi.fn().mockResolvedValue({ functionName: "dev-function" }),
-      invokeFunction: vi.fn()
+      invokeFunction: vi.fn(),
     };
 
     await watchTarget({
       configPath: path.join(root, "lambda-dev.yml"),
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       deps: { buildArtifact, lambda },
-      watchFactory: () => watcher as never
+      watchFactory: () => watcher as never,
     });
 
     watcher.emit("all", "change", path.join(root, ".lambda-dev", "index.js"));

@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { buildArtifact, type BuildResult } from "./build.js";
-import { AwsLambdaAdapter, type InvokeResult, type LambdaAdapter, type DeployResult } from "./aws.js";
+import {
+  AwsLambdaAdapter,
+  type InvokeResult,
+  type LambdaAdapter,
+  type DeployResult,
+} from "./aws.js";
 import { loadTarget, type LoadedTarget } from "./config.js";
 import { logStep, previewPayload, type Logger } from "./output.js";
 
@@ -40,11 +45,26 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
   const deps = resolveDeps(options.deps);
   logStep(options.logger, loaded.targetName, "build", `Building ${loaded.target.build.entry}`);
   const build = await deps.buildArtifact(loaded);
-  logStep(options.logger, loaded.targetName, "build", `Created ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`);
+  logStep(
+    options.logger,
+    loaded.targetName,
+    "build",
+    `Created ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`,
+  );
 
-  logStep(options.logger, loaded.targetName, "deploy", `Uploading to ${loaded.target.functionName}`);
+  logStep(
+    options.logger,
+    loaded.targetName,
+    "deploy",
+    `Uploading to ${loaded.target.functionName}`,
+  );
   const deploy = await deps.lambda.updateFunctionCode(loaded, build.artifactBytes);
-  logStep(options.logger, loaded.targetName, "deploy", `Uploaded ${deploy.functionName}${deploy.version ? ` version ${deploy.version}` : ""}`);
+  logStep(
+    options.logger,
+    loaded.targetName,
+    "deploy",
+    `Uploaded ${deploy.functionName}${deploy.version ? ` version ${deploy.version}` : ""}`,
+  );
 
   const shouldInvoke = options.invoke ?? loaded.target.invoke.afterDeploy;
   if (!shouldInvoke) {
@@ -68,11 +88,18 @@ export async function invokeTarget(options: InvokeOptions): Promise<InvokeResult
   return result;
 }
 
-export async function validateTarget(configPath?: string, targetName?: string): Promise<LoadedTarget> {
+export async function validateTarget(
+  configPath?: string,
+  targetName?: string,
+): Promise<LoadedTarget> {
   return loadTarget(configPath, targetName);
 }
 
-export async function resolvePayload(loaded: LoadedTarget, payloadFile?: string, payloadJson?: string): Promise<unknown> {
+export async function resolvePayload(
+  loaded: LoadedTarget,
+  payloadFile?: string,
+  payloadJson?: string,
+): Promise<unknown> {
   if (payloadJson !== undefined) {
     return JSON.parse(payloadJson);
   }
@@ -111,6 +138,6 @@ export function formatInvokeSummary(result: InvokeResult): string {
 function resolveDeps(overrides: Partial<RuntimeDeps> = {}): RuntimeDeps {
   return {
     buildArtifact: overrides.buildArtifact ?? buildArtifact,
-    lambda: overrides.lambda ?? new AwsLambdaAdapter()
+    lambda: overrides.lambda ?? new AwsLambdaAdapter(),
   };
 }

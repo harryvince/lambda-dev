@@ -5,18 +5,27 @@ targets:
     functionName: my-existing-lambda-dev
     region: eu-west-2
     profile: default
-    build:
+    build: &sharedBuild
       entry: src/handler.ts
       bundle: true
       platform: node
       target: node20
       format: cjs
       sourcemap: true
+      # Optional runtime assets (uncomment and replace with your paths):
+      # copy:
+      #   - from: assets/native-helper
+      #     to: bin/native-helper
+      #   - from: assets/runtime
+      #     to: runtime
+      #   - from: assets/schemas/**/*.json
+      #     to: schemas
       external:
         - "@aws-sdk/*"
     watch:
       include:
         - src/**/*.ts
+        # Add assets/**/* here to rebuild when copied assets change.
       exclude:
         - dist/**
         - node_modules/**
@@ -25,3 +34,11 @@ targets:
     invoke:
       afterDeploy: true
       payloadFile: events/dev.json
+
+  # Reuse the dev build configuration and override individual options:
+  # staging:
+  #   functionName: my-existing-lambda-staging
+  #   region: eu-west-2
+  #   build:
+  #     <<: *sharedBuild
+  #     minify: true

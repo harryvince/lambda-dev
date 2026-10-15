@@ -12,14 +12,14 @@ describe("core use cases", () => {
       artifactPath: "/tmp/function.zip",
       artifactBytes: new Uint8Array([1]),
       sizeBytes: 1,
-      durationMs: 5
+      durationMs: 5,
     });
     const lambda = fakeLambda();
 
     const result = await deployTarget({
       configPath,
       logger: memoryLogger(),
-      deps: { buildArtifact, lambda }
+      deps: { buildArtifact, lambda },
     });
 
     expect(buildArtifact).toHaveBeenCalledOnce();
@@ -40,10 +40,10 @@ describe("core use cases", () => {
           artifactPath: "/tmp/function.zip",
           artifactBytes: new Uint8Array([1]),
           sizeBytes: 1,
-          durationMs: 5
+          durationMs: 5,
         }),
-        lambda
-      }
+        lambda,
+      },
     });
 
     expect(lambda.updateFunctionCode).toHaveBeenCalledOnce();
@@ -57,26 +57,37 @@ describe("core use cases", () => {
 
     await invokeTarget({
       configPath,
-      payloadJson: "{\"ok\":true}",
+      payloadJson: '{"ok":true}',
       logger: memoryLogger(),
-      deps: { buildArtifact, lambda }
+      deps: { buildArtifact, lambda },
     });
 
     expect(buildArtifact).not.toHaveBeenCalled();
     expect(lambda.invokeFunction).toHaveBeenCalledOnce();
   });
 
+  it("skips AWS upload and invoke when a configured copy source is missing", async () => {
+    const configPath = await writeProjectConfig(true);
+    const fs = await import("node:fs/promises");
+    const contents = await fs.readFile(configPath, "utf8");
+    await fs.writeFile(configPath, contents.replace("entry: src/handler.ts", "entry: src/handler.ts\n      copy: [{ from: missing-runtime.bin, to: bin/helper }]"));
+    const lambda = fakeLambda();
+    await expect(deployTarget({ configPath, logger: memoryLogger(), deps: { lambda } })).rejects.toMatchObject({ category: "build" });
+    expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
+    expect(lambda.invokeFunction).not.toHaveBeenCalled();
+  });
+
   it("formats invoke results with key fields", () => {
-    expect(formatInvokeSummary({ statusCode: 200, functionError: "Unhandled", payload: { ok: false } })).toContain(
-      "functionError Unhandled"
-    );
+    expect(
+      formatInvokeSummary({ statusCode: 200, functionError: "Unhandled", payload: { ok: false } }),
+    ).toContain("functionError Unhandled");
   });
 });
 
 function fakeLambda(): LambdaAdapter {
   return {
     updateFunctionCode: vi.fn().mockResolvedValue({ functionName: "dev-function", version: "1" }),
-    invokeFunction: vi.fn().mockResolvedValue({ statusCode: 200, payload: { ok: true } })
+    invokeFunction: vi.fn().mockResolvedValue({ statusCode: 200, payload: { ok: true } }),
   };
 }
 
@@ -101,7 +112,7 @@ targets:
     invoke:
       afterDeploy: ${afterDeploy}
       payloadFile: event.json
-`
+`,
   );
   return configPath;
 }

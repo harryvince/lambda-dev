@@ -11,7 +11,11 @@ export class LambdaDevError extends Error {
   readonly hint?: string;
   readonly cause?: unknown;
 
-  constructor(category: ErrorCategory, message: string, options: { hint?: string; cause?: unknown } = {}) {
+  constructor(
+    category: ErrorCategory,
+    message: string,
+    options: { hint?: string; cause?: unknown } = {},
+  ) {
     super(message);
     this.name = "LambdaDevError";
     this.category = category;
@@ -20,7 +24,11 @@ export class LambdaDevError extends Error {
   }
 }
 
-export function toLambdaDevError(category: ErrorCategory, message: string, cause: unknown): LambdaDevError {
+export function toLambdaDevError(
+  category: ErrorCategory,
+  message: string,
+  cause: unknown,
+): LambdaDevError {
   if (cause instanceof LambdaDevError) {
     return cause;
   }

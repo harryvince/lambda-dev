@@ -1,7 +1,8 @@
 import { inspect } from "node:util";
 import { LambdaDevError } from "./errors.js";
 
-const SECRET_KEY_PATTERN = /(access[_-]?key|secret|session[_-]?token|password|credential|authorization|api[_-]?key)/i;
+const SECRET_KEY_PATTERN =
+  /(access[_-]?key|secret|session[_-]?token|password|credential|authorization|api[_-]?key)/i;
 const MAX_PREVIEW_CHARS = 2000;
 
 export interface Logger {
@@ -13,7 +14,7 @@ export interface Logger {
 export const consoleLogger: Logger = {
   info: (message) => console.log(message),
   warn: (message) => console.warn(message),
-  error: (message) => console.error(message)
+  error: (message) => console.error(message),
 };
 
 export function redact(value: unknown): unknown {
@@ -30,7 +31,10 @@ export function redact(value: unknown): unknown {
   }
 
   if (typeof value === "string") {
-    return value.replace(/(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)=\S+/g, "$1=[redacted]");
+    return value.replace(
+      /(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)=\S+/g,
+      "$1=[redacted]",
+    );
   }
 
   return value;
@@ -38,7 +42,8 @@ export function redact(value: unknown): unknown {
 
 export function previewPayload(value: unknown, maxChars = MAX_PREVIEW_CHARS): string {
   const redacted = redact(value);
-  const rendered = typeof redacted === "string" ? redacted : inspect(redacted, { depth: 6, colors: false });
+  const rendered =
+    typeof redacted === "string" ? redacted : inspect(redacted, { depth: 6, colors: false });
 
   if (rendered.length <= maxChars) {
     return rendered;

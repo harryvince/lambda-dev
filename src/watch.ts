@@ -16,20 +16,25 @@ export interface WatchOptions {
 
 export async function watchTarget(options: WatchOptions): Promise<Pick<FSWatcher, "on" | "close">> {
   const loaded = await loadTarget(options.configPath, options.targetName);
-  const watchPlan = createWatchPlan(loaded.projectRoot, loaded.target.watch.include, loaded.target.watch.exclude);
-  const watcherFactory = options.watchFactory ?? ((paths, watchOptions) => chokidar.watch(paths, watchOptions));
+  const watchPlan = createWatchPlan(
+    loaded.projectRoot,
+    loaded.target.watch.include,
+    loaded.target.watch.exclude,
+  );
+  const watcherFactory =
+    options.watchFactory ?? ((paths, watchOptions) => chokidar.watch(paths, watchOptions));
   const runner = new SerializedDebouncedRunner(loaded.target.watch.debounceMs, async () => {
     await deployTarget({
       configPath: options.configPath,
       targetName: loaded.targetName,
       logger: options.logger,
-      deps: options.deps
+      deps: options.deps,
     });
   });
 
   const watcher = watcherFactory(watchPlan.roots, {
     ignored: (filePath) => watchPlan.isIgnored(filePath),
-    ignoreInitial: true
+    ignoreInitial: true,
   });
 
   watcher.on("all", (_event, filePath) => {
@@ -41,7 +46,12 @@ export async function watchTarget(options: WatchOptions): Promise<Pick<FSWatcher
     runner.schedule().catch((error) => options.logger.error(formatError(error)));
   });
 
-  logStep(options.logger, loaded.targetName, "watch", `Watching ${loaded.target.watch.include.join(", ")}`);
+  logStep(
+    options.logger,
+    loaded.targetName,
+    "watch",
+    `Watching ${loaded.target.watch.include.join(", ")}`,
+  );
   return watcher;
 }
 
@@ -51,24 +61,31 @@ export interface WatchPlan {
   isIgnored(filePath: string): boolean;
 }
 
-export function createWatchPlan(projectRoot: string, includes: string[], excludes: string[]): WatchPlan {
+export function createWatchPlan(
+  projectRoot: string,
+  includes: string[],
+  excludes: string[],
+): WatchPlan {
   const normalizedRoot = path.resolve(projectRoot);
   const includeMatchers = includes.map((pattern) => createMatcher(pattern));
   const excludeMatchers = excludes.map((pattern) => createMatcher(pattern));
   const roots = Array.from(
-    new Set(includes.map((pattern) => path.resolve(normalizedRoot, getWatchRoot(pattern))).sort())
+    new Set(includes.map((pattern) => path.resolve(normalizedRoot, getWatchRoot(pattern))).sort()),
   );
 
   return {
     roots: roots.length > 0 ? roots : [normalizedRoot],
     shouldHandle(filePath: string): boolean {
       const relativePath = toRelativeUnixPath(normalizedRoot, filePath);
-      return includeMatchers.some((matches) => matches(relativePath)) && !excludeMatchers.some((matches) => matches(relativePath));
+      return (
+        includeMatchers.some((matches) => matches(relativePath)) &&
+        !excludeMatchers.some((matches) => matches(relativePath))
+      );
     },
     isIgnored(filePath: string): boolean {
       const relativePath = toRelativeUnixPath(normalizedRoot, filePath);
       return excludeMatchers.some((matches) => matches(relativePath));
-    }
+    },
   };
 }
 
@@ -76,7 +93,9 @@ function getWatchRoot(pattern: string): string {
   const unixPattern = toUnixPath(pattern);
   const wildcardIndex = unixPattern.search(/[*[{?]/);
   const stablePrefix = wildcardIndex === -1 ? unixPattern : unixPattern.slice(0, wildcardIndex);
-  const directory = stablePrefix.endsWith("/") ? stablePrefix.slice(0, -1) : path.posix.dirname(stablePrefix);
+  const directory = stablePrefix.endsWith("/")
+    ? stablePrefix.slice(0, -1)
+    : path.posix.dirname(stablePrefix);
 
   if (!directory || directory === ".") {
     return ".";
@@ -145,7 +164,7 @@ export class SerializedDebouncedRunner {
 
   constructor(
     private readonly debounceMs: number,
-    private readonly operation: () => Promise<void>
+    private readonly operation: () => Promise<void>,
   ) {}
 
   async schedule(): Promise<void> {

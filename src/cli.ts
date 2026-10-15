@@ -49,7 +49,7 @@ export function createProgram(): Command {
         invoke: options.invoke,
         payloadFile: options.payloadFile,
         payloadJson: options.payloadJson,
-        logger: consoleLogger
+        logger: consoleLogger,
       });
     });
 
@@ -66,7 +66,7 @@ export function createProgram(): Command {
         targetName: target,
         payloadFile: options.payloadFile,
         payloadJson: options.payloadJson,
-        logger: consoleLogger
+        logger: consoleLogger,
       });
     });
 
@@ -79,7 +79,7 @@ export function createProgram(): Command {
       await watchTarget({
         configPath: options.config,
         targetName: target,
-        logger: consoleLogger
+        logger: consoleLogger,
       });
     });
 

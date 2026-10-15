@@ -3,7 +3,7 @@ import {
   LambdaClient,
   LogType,
   UpdateFunctionCodeCommand,
-  type LambdaClientConfig
+  type LambdaClientConfig,
 } from "@aws-sdk/client-lambda";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { LambdaDevError, toLambdaDevError } from "./errors.js";
@@ -26,7 +26,11 @@ export interface InvokeResult {
 
 export interface LambdaAdapter {
   updateFunctionCode(loaded: LoadedTarget, artifactBytes: Uint8Array): Promise<DeployResult>;
-  invokeFunction(loaded: LoadedTarget, payload: unknown, logType?: "None" | "Tail"): Promise<InvokeResult>;
+  invokeFunction(
+    loaded: LoadedTarget,
+    payload: unknown,
+    logType?: "None" | "Tail",
+  ): Promise<InvokeResult>;
 }
 
 export function createLambdaClient(target: LoadedTarget["target"]): LambdaClient {
@@ -47,21 +51,25 @@ export class AwsLambdaAdapter implements LambdaAdapter {
       const result = await client.send(
         new UpdateFunctionCodeCommand({
           FunctionName: loaded.target.functionName,
-          ZipFile: artifactBytes
-        })
+          ZipFile: artifactBytes,
+        }),
       );
 
       return {
         functionName: loaded.target.functionName,
         version: result.Version,
-        requestId: result.$metadata.requestId
+        requestId: result.$metadata.requestId,
       };
     } catch (error) {
       throw toLambdaDevError("aws_deploy", `Failed to upload ${loaded.target.functionName}`, error);
     }
   }
 
-  async invokeFunction(loaded: LoadedTarget, payload: unknown, logType: "None" | "Tail" = "Tail"): Promise<InvokeResult> {
+  async invokeFunction(
+    loaded: LoadedTarget,
+    payload: unknown,
+    logType: "None" | "Tail" = "Tail",
+  ): Promise<InvokeResult> {
     const client = this.clientFactory(loaded.target);
 
     try {
@@ -70,8 +78,8 @@ export class AwsLambdaAdapter implements LambdaAdapter {
           FunctionName: loaded.target.functionName,
           InvocationType: "RequestResponse",
           LogType: logType as LogType,
-          Payload: encodePayload(payload)
-        })
+          Payload: encodePayload(payload),
+        }),
       );
 
       return {
@@ -79,8 +87,10 @@ export class AwsLambdaAdapter implements LambdaAdapter {
         functionError: result.FunctionError,
         executedVersion: result.ExecutedVersion,
         requestId: result.$metadata.requestId,
-        logTail: result.LogResult ? Buffer.from(result.LogResult, "base64").toString("utf8") : undefined,
-        payload: decodePayload(result.Payload)
+        logTail: result.LogResult
+          ? Buffer.from(result.LogResult, "base64").toString("utf8")
+          : undefined,
+        payload: decodePayload(result.Payload),
       };
     } catch (error) {
       throw toLambdaDevError("aws_invoke", `Failed to invoke ${loaded.target.functionName}`, error);
@@ -109,7 +119,10 @@ function decodePayload(payload: Uint8Array | undefined): unknown {
   }
 }
 
-export function safeAwsError(error: unknown, fallbackCategory: "aws_deploy" | "aws_invoke"): LambdaDevError {
+export function safeAwsError(
+  error: unknown,
+  fallbackCategory: "aws_deploy" | "aws_invoke",
+): LambdaDevError {
   if (error instanceof LambdaDevError) {
     return error;
   }

@@ -16,7 +16,9 @@ describe("cli", () => {
   });
 
   it("exposes only the aws-lambda-dev package bin", async () => {
-    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { bin: Record<string, string> };
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      bin: Record<string, string>;
+    };
 
     expect(packageJson.bin).toEqual({ "aws-lambda-dev": "dist/cli.js" });
     expect(packageJson.bin).not.toHaveProperty("lambda-dev");
@@ -61,7 +63,7 @@ targets:
     region: eu-west-2
     build:
       entry: src/handler.ts
-`
+`,
   );
   return configPath;
 }

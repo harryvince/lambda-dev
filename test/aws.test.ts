@@ -11,7 +11,11 @@ describe("aws adapter", () => {
     const result = await adapter.updateFunctionCode(loadedTarget(), new Uint8Array([1, 2, 3]));
 
     expect(send).toHaveBeenCalledWith(expect.any(UpdateFunctionCodeCommand));
-    expect(result).toMatchObject({ functionName: "dev-function", version: "7", requestId: "req-1" });
+    expect(result).toMatchObject({
+      functionName: "dev-function",
+      version: "7",
+      requestId: "req-1",
+    });
   });
 
   it("invokes Lambda and decodes response payload and log tail", async () => {
@@ -20,7 +24,7 @@ describe("aws adapter", () => {
       ExecutedVersion: "$LATEST",
       LogResult: Buffer.from("hello logs").toString("base64"),
       Payload: new TextEncoder().encode(JSON.stringify({ ok: true })),
-      $metadata: { requestId: "req-2" }
+      $metadata: { requestId: "req-2" },
     });
     const adapter = new AwsLambdaAdapter(() => ({ send }) as never);
     const result = await adapter.invokeFunction(loadedTarget(), { event: true });
@@ -54,10 +58,11 @@ function loadedTarget(): LoadedTarget {
         minify: false,
         external: [],
         define: {},
-        outDir: ".lambda-dev/dev"
+        copy: [],
+        outDir: ".lambda-dev/dev",
       },
       watch: { include: ["src/**/*.ts"], exclude: [], debounceMs: 300 },
-      invoke: { afterDeploy: false, logType: "Tail" }
-    }
+      invoke: { afterDeploy: false, logType: "Tail" },
+    },
   };
 }
