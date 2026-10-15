@@ -2,6 +2,7 @@ export type ErrorCategory =
   | "validation"
   | "build"
   | "aws_deploy"
+  | "aws_configuration"
   | "aws_invoke"
   | "filesystem"
   | "unexpected";

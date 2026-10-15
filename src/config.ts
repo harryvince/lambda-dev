@@ -1,8 +1,13 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { parse } from "yaml";
+import { parse, YAMLParseError } from "yaml";
 import { z } from "zod";
 import { LambdaDevError } from "./errors.js";
+import { RESERVED_ENVIRONMENT_KEYS } from "./environment.js";
+
+const environmentKey = z.string()
+  .regex(/^[A-Za-z][A-Za-z0-9_]+$/, "Use a letter first and at least two letters, digits, or underscores")
+  .refine((key) => !RESERVED_ENVIRONMENT_KEYS.has(key), "Variable name is reserved by Lambda");
 
 const buildSchema = z
   .object({
@@ -54,6 +59,7 @@ const targetSchema = z
     functionName: z.string().min(1),
     region: z.string().min(1),
     profile: z.string().min(1).optional(),
+    environment: z.record(environmentKey, z.string().nullable()).optional(),
     build: buildSchema,
     watch: watchSchema,
     invoke: invokeSchema,
@@ -101,10 +107,12 @@ export async function loadConfig(configPath = "lambda-dev.yml"): Promise<RawConf
   try {
     parsed = parse(fileContents, { merge: true, maxAliasCount: 100 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid YAML";
-    throw new LambdaDevError("validation", `Invalid YAML in ${absolutePath}: ${message}`, {
-      cause: error,
-    });
+    // YAML parser messages may quote source lines containing environment values.
+    const location = error instanceof YAMLParseError ? error.linePos?.[0] : undefined;
+    const message = location
+      ? `Invalid YAML at line ${location.line}, column ${location.col}`
+      : "Invalid YAML or unresolved/invalid alias or merge (alias expansion is limited)";
+    throw new LambdaDevError("validation", `Invalid YAML in ${absolutePath}: ${message}`);
   }
 
   const result = configSchema.safeParse(parsed);

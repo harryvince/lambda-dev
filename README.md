@@ -145,6 +145,46 @@ targets:
 
 Define an anchor before its alias. Explicit values override merged values. For multiple mappings, use `<<: [*first, *second]`; earlier mappings take precedence. Merges are shallow: nested mappings need their own merge, and lists are replaced rather than concatenated. Put anchors inside supported configuration fields as shown above; arbitrary top-level `defaults` keys are rejected. Invalid aliases and merges produce validation errors, and alias expansion is bounded.
 
+## Lambda environment variables
+
+Set `environment` on a target to update runtime variables during `deploy` and `watch`:
+
+```yaml
+version: 1
+defaultTarget: dev
+targets:
+  dev:
+    functionName: my-lambda-dev
+    region: eu-west-2
+    environment: &sharedEnvironment
+      LOG_LEVEL: debug
+      JAEGER_SERVICE_NAME: my-service
+      ENABLE_TRACING: "true"
+      EMPTY_VALUE: ""
+      OLD_FLAG: null
+    build: &sharedBuild
+      entry: src/handler.ts
+  staging:
+    functionName: my-lambda-staging
+    region: eu-west-2
+    environment:
+      <<: *sharedEnvironment
+      LOG_LEVEL: info
+    build: *sharedBuild
+```
+
+Strings set or update a variable; `null` explicitly deletes it. Unspecified remote variables are preserved. Removing an entry from YAML stops managing that variable and does not remove it from Lambda. An omitted `environment` field or an empty map (`environment: {}`) disables environment synchronization entirely.
+
+Values must be strings or `null`; quote booleans and numbers such as `"true"` and `"8080"`. Empty strings are supported. Values are literal: `${LOCAL_VALUE}` is sent as that exact text, without reading the local shell or `.env` files. Keys must start with a letter, contain only letters, digits, and underscores, and have at least two characters. Lambda-reserved names such as `AWS_REGION` are rejected; custom `AWS_` names are not rejected solely by prefix. The final environment, including retained existing variables, must fit within Lambda's 4 KB limit. See [AWS environment variable rules](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html).
+
+The CLI builds locally before changing AWS. For a nonempty environment patch, it waits for any in-progress update, reads and merges the current variables, writes only if needed using the configuration revision, waits for that update, uploads code, and waits for code completion before optional invocation. Each update wait has a 120-second limit. It checks for an active function and successful update state before proceeding. Configuration read failures fail closed. A concurrent configuration change fails the revision guard; rerun to obtain a fresh revision instead of overwriting the newer change.
+
+**Configuration and code updates are separate AWS operations.** If the code upload fails, your environment may already be updated. A timeout also means the remote operation might still complete. Inspect Lambda's state and configuration, correct any permissions or values, then retry once stable. To restore previous settings, explicitly supply the desired values or deletions; there is no automatic rollback. Environment updates affect the unpublished function configuration, not published immutable versions.
+
+Environment values are omitted from synchronization logs, summaries, and configuration failure diagnostics. Keep secrets out of committed YAML; use your existing secrets-management approach for sensitive data. Invoked application responses and requested Lambda logs retain their existing behavior, so your function should also avoid printing secrets.
+
+Add `lambda-dev.yml` to `watch.include` alongside your source globs if editing YAML should itself trigger deployment. Without that opt-in, changed environment settings are picked up on the next included source-file event. Standalone `validate` and `invoke` do not update the environment. Targets with omitted/empty environment retain the existing code deployment path.
+
 ## Commands
 
 ```bash
@@ -165,18 +205,26 @@ Use the smallest resource ARN that matches your development Lambda.
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["lambda:UpdateFunctionCode", "lambda:InvokeFunction"],
+      "Action": [
+        "lambda:UpdateFunctionCode",
+        "lambda:InvokeFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:UpdateFunctionConfiguration"
+      ],
       "Resource": "arn:aws:lambda:eu-west-2:123456789012:function:my-existing-lambda-dev"
     }
   ]
 }
 ```
 
+`lambda:GetFunctionConfiguration` and `lambda:UpdateFunctionConfiguration` are needed for nonempty environment patches and their completion waits. Code-only targets keep the existing permissions. KMS-encrypted environments may also require access to the existing encryption key; the CLI does not modify that key.
+
 ## Troubleshooting
 
 - `validation`: fix `lambda-dev.yml` before retrying; AWS is not called when config validation fails.
 - `build`: esbuild failed, so upload and invoke are skipped for that cycle.
-- `aws_deploy`: credentials, region, IAM, or function name prevented upload.
+- `aws_deploy`: credentials, region, IAM, or function name prevented upload. Environment synchronization may already have completed.
+- `aws_configuration`: environment read/update or completion checks failed. Inspect the function status, revision, and IAM/KMS access before retrying; code upload/invocation stops at the failed stage.
 - `aws_invoke`: deploy may have succeeded, but the test invocation failed.
 
 Watch mode debounces rapid saves and serializes deploys per target. If a file changes while a deploy is active, another cycle is queued after the current one finishes.

@@ -9,6 +9,7 @@ import {
 } from "./aws.js";
 import { loadTarget, type LoadedTarget } from "./config.js";
 import { logStep, previewPayload, type Logger } from "./output.js";
+import { hasEnvironmentPatch, type EnvironmentUpdateResult } from "./environment.js";
 
 export interface RuntimeDeps {
   buildArtifact: (loaded: LoadedTarget) => Promise<BuildResult>;
@@ -38,6 +39,7 @@ export interface DeploySummary {
   build: BuildResult;
   deploy: DeployResult;
   invoke?: InvokeResult;
+  environment?: EnvironmentUpdateResult;
 }
 
 export async function deployTarget(options: DeployOptions): Promise<DeploySummary> {
@@ -52,6 +54,15 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     `Created ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`,
   );
 
+  let environment: EnvironmentUpdateResult | undefined;
+  if (hasEnvironmentPatch(loaded.target.environment)) {
+    logStep(options.logger, loaded.targetName, "configuration", "Synchronizing environment variables");
+    environment = await deps.lambda.updateEnvironment(loaded);
+    logStep(options.logger, loaded.targetName, "configuration", environment.changed
+      ? `Updated ${environment.updatedCount} and deleted ${environment.deletedCount} variables`
+      : "Environment already matches; no configuration write needed");
+  }
+
   logStep(
     options.logger,
     loaded.targetName,
@@ -59,6 +70,10 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     `Uploading to ${loaded.target.functionName}`,
   );
   const deploy = await deps.lambda.updateFunctionCode(loaded, build.artifactBytes);
+  if (environment) {
+    logStep(options.logger, loaded.targetName, "deploy", "Waiting for code update completion");
+    await deps.lambda.waitForUpdate(loaded);
+  }
   logStep(
     options.logger,
     loaded.targetName,
@@ -68,14 +83,14 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
 
   const shouldInvoke = options.invoke ?? loaded.target.invoke.afterDeploy;
   if (!shouldInvoke) {
-    return { build, deploy };
+    return { build, deploy, ...(environment ? { environment } : {}) };
   }
 
   const payload = await resolvePayload(loaded, options.payloadFile, options.payloadJson);
   logStep(options.logger, loaded.targetName, "invoke", `Payload ${previewPayload(payload, 300)}`);
   const invoke = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
   logStep(options.logger, loaded.targetName, "invoke", formatInvokeSummary(invoke));
-  return { build, deploy, invoke };
+  return { build, deploy, invoke, ...(environment ? { environment } : {}) };
 }
 
 export async function invokeTarget(options: InvokeOptions): Promise<InvokeResult> {

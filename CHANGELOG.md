@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## Unreleased
+
+### Features
+
+- Add per-target YAML environment patches for Lambda deploy/watch, preserving unrelated variables and supporting explicit null deletion, revision-guarded updates, and bounded completion waits.
+
+
 ## [1.1.0](https://github.com/harryvince/lambda-dev/compare/v1.0.2...v1.1.0) (2026-10-15)
 
 

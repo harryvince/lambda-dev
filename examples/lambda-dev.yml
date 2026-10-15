@@ -5,6 +5,12 @@ targets:
     functionName: my-existing-lambda-dev
     region: eu-west-2
     profile: default
+    # Optional runtime environment patch; unrelated remote values are retained.
+    # environment: &sharedEnvironment
+    #   LOG_LEVEL: debug
+    #   JAEGER_SERVICE_NAME: my-service
+    #   ENABLE_TRACING: "true"
+    #   OLD_FLAG: null # Explicit deletion; omitted keys are preserved.
     build: &sharedBuild
       entry: src/handler.ts
       bundle: true
@@ -26,6 +32,7 @@ targets:
       include:
         - src/**/*.ts
         # Add assets/**/* here to rebuild when copied assets change.
+        # Add lambda-dev.yml here to deploy when configuration changes.
       exclude:
         - dist/**
         - node_modules/**
@@ -42,3 +49,9 @@ targets:
   #   build:
   #     <<: *sharedBuild
   #     minify: true
+
+  # To share environment values, uncomment the anchored environment above,
+  # then add under staging:
+  #   environment:
+  #     <<: *sharedEnvironment
+  #     LOG_LEVEL: info

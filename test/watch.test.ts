@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
@@ -100,6 +100,8 @@ targets:
       durationMs: 1,
     });
     const lambda: LambdaAdapter = {
+      updateEnvironment: vi.fn().mockResolvedValue({ changed: false, updatedCount: 0, deletedCount: 0 }),
+      waitForUpdate: vi.fn().mockResolvedValue(undefined),
       updateFunctionCode: vi.fn().mockResolvedValue({ functionName: "dev-function" }),
       invokeFunction: vi.fn(),
     };
@@ -117,6 +119,15 @@ targets:
 
     watcher.emit("all", "change", path.join(root, "src", "handler.ts"));
     await vi.waitFor(() => expect(buildArtifact).toHaveBeenCalledTimes(1));
-    expect(lambda.updateFunctionCode).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(lambda.updateFunctionCode).toHaveBeenCalledTimes(1));
+    expect(lambda.updateEnvironment).not.toHaveBeenCalled();
+
+    const configPath = path.join(root, "lambda-dev.yml");
+    await writeFile(configPath, (await readFile(configPath, "utf8")).replace("    build:", "    environment: { LOG_LEVEL: trace }\n    build:"));
+    watcher.emit("all", "change", path.join(root, "src", "handler.ts"));
+    await vi.waitFor(() => expect(lambda.updateFunctionCode).toHaveBeenCalledTimes(2));
+    expect(lambda.updateEnvironment).toHaveBeenCalledOnce();
+    expect(vi.mocked(lambda.updateEnvironment).mock.calls[0][0].target.environment).toEqual({ LOG_LEVEL: "trace" });
+    expect(lambda.waitForUpdate).toHaveBeenCalledOnce();
   });
 });
