@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.2.1](https://github.com/harryvince/lambda-dev/compare/v1.2.0...v1.2.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* vuln with adm-zip ([07b2ba9](https://github.com/harryvince/lambda-dev/commit/07b2ba959b14571550876aba54099feaecad955b))
+
 ## [1.2.0](https://github.com/harryvince/lambda-dev/compare/v1.1.0...v1.2.0) (2026-10-15)
 
 
