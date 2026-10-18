@@ -132,7 +132,7 @@ Globs use the same syntax as [`build.copy`](copying-files.md): `*`, `**`, `?`, c
 | --- | --- | --- |
 | `afterDeploy` | `false` | Invoke after every `deploy` and `watch` cycle. |
 | `payloadFile` | none | JSON file to send as the event. |
-| `payloadJson` | none | Inline event, written as YAML. Takes priority over any payload file. |
+| `payloadJson` | none | Inline event, written as YAML, sent as JSON. Takes priority over any payload file. A string is sent as a JSON string. |
 | `logType` | `Tail` | `Tail` asks Lambda to return the last 4 KB of logs with the response, `None` doesn't. The CLI currently reports that logs are available but doesn't print them. |
 
 See [Payloads](commands.md#payloads) for how command-line flags interact with these.

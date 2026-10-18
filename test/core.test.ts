@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { deployTarget, formatInvokeSummary, invokeTarget, validateTarget } from "../src/core.js";
 import { LambdaDevError } from "../src/errors.js";
-import type { LambdaAdapter } from "../src/aws.js";
+import type { EnvironmentUpdateResult, LambdaAdapter } from "../src/aws.js";
 
 describe("core use cases", () => {
   it("deploys once and invokes after upload when configured", async () => {
@@ -161,17 +161,13 @@ describe("environment deployment orchestration", () => {
     const events: string[] = [];
     const lambda = fakeLambda();
 
-    let releaseEnvironment!: (value: {
-      changed: boolean;
-      updatedCount: number;
-      deletedCount: number;
-    }) => void;
+    let releaseEnvironment!: (value: EnvironmentUpdateResult) => void;
 
     let releaseCode!: () => void;
     lambda.updateEnvironment = vi.fn(() => {
       events.push("environment");
 
-      return new Promise((resolve) => {
+      return new Promise<EnvironmentUpdateResult>((resolve) => {
         releaseEnvironment = resolve;
       });
     });
@@ -183,7 +179,7 @@ describe("environment deployment orchestration", () => {
     lambda.waitForUpdate = vi.fn(() => {
       events.push("wait");
 
-      return new Promise((resolve) => {
+      return new Promise<void>((resolve) => {
         releaseCode = resolve;
       });
     });

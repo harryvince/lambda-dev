@@ -37,10 +37,16 @@ export function hasEnvironmentPatch(
   return environment !== undefined && Object.keys(environment).length > 0;
 }
 
+export interface EnvironmentPatchResult {
+  /** The function's full variable map after applying the patch. */
+  variables: Record<string, string>;
+  result: EnvironmentUpdateResult;
+}
+
 export function applyEnvironmentPatch(
   existing: Record<string, string>,
   patch: Record<string, string | null>,
-): { variables: Record<string, string>; result: EnvironmentUpdateResult } {
+): EnvironmentPatchResult {
   const variables = { ...existing };
   let updatedCount = 0;
   let deletedCount = 0;

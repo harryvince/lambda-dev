@@ -2,10 +2,14 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
+import { z } from "zod";
 import { deployTarget, invokeTarget, validateTarget } from "./core.js";
 import { formatError, consoleLogger } from "./output.js";
 import { writeStarterConfig } from "./scaffold.js";
 import { watchTarget } from "./watch.js";
+
+// Declared before the entrypoint check below runs main(), which reads the package version.
+const packageVersionSchema = z.object({ version: z.string() });
 
 export function createProgram(): Command {
   const program = new Command();
@@ -119,9 +123,11 @@ function readPackageVersionSyncFallback(): string {
   const packageUrl = new URL("../package.json", import.meta.url);
 
   try {
-    const packageJson = JSON.parse(readFileSync(packageUrl, "utf8")) as { version?: unknown };
+    const packageJson = packageVersionSchema.safeParse(
+      JSON.parse(readFileSync(packageUrl, "utf8")),
+    );
 
-    return typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
+    return packageJson.success ? packageJson.data.version : "0.0.0";
   } catch {
     return "0.0.0";
   }

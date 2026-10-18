@@ -1,7 +1,6 @@
 import {
   InvokeCommand,
   LambdaClient,
-  LogType,
   UpdateFunctionCodeCommand,
   GetFunctionConfigurationCommand,
   UpdateFunctionConfigurationCommand,
@@ -9,6 +8,7 @@ import {
   type GetFunctionConfigurationCommandOutput,
   type LambdaClientConfig,
 } from "@aws-sdk/client-lambda";
+import { z } from "zod";
 import { LambdaDevError, toLambdaDevError } from "./errors.js";
 import type { LoadedTarget } from "./config.js";
 import {
@@ -16,8 +16,16 @@ import {
   hasEnvironmentPatch,
   type EnvironmentUpdateResult,
 } from "./environment.js";
+import { parseJson, type JsonValue } from "./json.js";
 
 export type { EnvironmentUpdateResult } from "./environment.js";
+
+// Lambda's environment response is checked at runtime: an Error means the values couldn't be decrypted.
+const lambdaEnvironmentSchema = z
+  .object({ Error: z.unknown().optional(), Variables: z.unknown().optional() })
+  .optional();
+
+const lambdaEnvironmentVariablesSchema = z.record(z.string(), z.string()).optional();
 
 export interface DeployResult {
   functionName: string;
@@ -31,7 +39,7 @@ export interface InvokeResult {
   executedVersion?: string;
   requestId?: string;
   logTail?: string;
-  payload?: unknown;
+  payload?: JsonValue;
 }
 
 export interface LambdaAdapter {
@@ -40,7 +48,7 @@ export interface LambdaAdapter {
   updateFunctionCode(loaded: LoadedTarget, artifactBytes: Uint8Array): Promise<DeployResult>;
   invokeFunction(
     loaded: LoadedTarget,
-    payload: unknown,
+    payload: JsonValue | undefined,
     logType?: "None" | "Tail",
   ): Promise<InvokeResult>;
 }
@@ -83,7 +91,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
 
       if (!result.changed) return result;
 
-      if (typeof configuration.RevisionId !== "string" || !configuration.RevisionId) {
+      if (!configuration.RevisionId) {
         throw new LambdaDevError("aws_configuration", "Lambda configuration revision is missing", {
           hint: "Retry after confirming the function configuration can be read. No configuration was written.",
         });
@@ -140,38 +148,28 @@ export class AwsLambdaAdapter implements LambdaAdapter {
   private environmentVariables(
     configuration: GetFunctionConfigurationCommandOutput,
   ): Record<string, string> {
-    const environment = configuration.Environment;
+    const environment = lambdaEnvironmentSchema.safeParse(configuration.Environment);
 
-    if (
-      environment !== undefined &&
-      (environment === null || typeof environment !== "object" || Array.isArray(environment))
-    ) {
+    if (!environment.success) {
       throw new LambdaDevError(
         "aws_configuration",
         "Lambda returned an invalid environment response",
       );
     }
 
-    if (environment?.Error !== undefined) {
+    if (environment.data?.Error !== undefined) {
       throw new LambdaDevError("aws_configuration", "Unable to read Lambda environment", {
         hint: "Check environment encryption and IAM/KMS access before retrying. A previous remote change may have completed.",
       });
     }
 
-    const variables = environment?.Variables;
+    const variables = lambdaEnvironmentVariablesSchema.safeParse(environment.data?.Variables);
 
-    if (variables === undefined) return {};
-
-    if (
-      typeof variables !== "object" ||
-      variables === null ||
-      Array.isArray(variables) ||
-      Object.values(variables).some((value) => typeof value !== "string")
-    ) {
+    if (!variables.success) {
       throw new LambdaDevError("aws_configuration", "Lambda returned an invalid environment map");
     }
 
-    return variables;
+    return variables.data ?? {};
   }
 
   private async waitWithClient(
@@ -262,7 +260,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
 
   async invokeFunction(
     loaded: LoadedTarget,
-    payload: unknown,
+    payload: JsonValue | undefined,
     logType: "None" | "Tail" = "Tail",
   ): Promise<InvokeResult> {
     const client = this.clientFactory(loaded.target);
@@ -272,7 +270,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
         new InvokeCommand({
           FunctionName: loaded.target.functionName,
           InvocationType: "RequestResponse",
-          LogType: logType as LogType,
+          LogType: logType,
           Payload: encodePayload(payload),
         }),
       );
@@ -298,11 +296,11 @@ export class AwsLambdaAdapter implements LambdaAdapter {
 }
 
 function environmentAwsError(
-  error: unknown,
+  cause: unknown,
   stage: string,
   category: "aws_configuration" | "aws_deploy" = "aws_configuration",
 ): LambdaDevError {
-  const code = error instanceof Error ? error.name : "";
+  const code = cause instanceof Error ? cause.name : "";
 
   const knownCodes = new Set([
     "PreconditionFailedException",
@@ -340,15 +338,15 @@ function withCredentialsHint(
   return new LambdaDevError(error.category, error.message, { hint, cause });
 }
 
-function encodePayload(payload: unknown): Uint8Array | undefined {
+function encodePayload(payload: JsonValue | undefined): Uint8Array | undefined {
   if (payload === undefined) {
     return undefined;
   }
 
-  return new TextEncoder().encode(typeof payload === "string" ? payload : JSON.stringify(payload));
+  return new TextEncoder().encode(JSON.stringify(payload));
 }
 
-function decodePayload(payload: Uint8Array | undefined): unknown {
+function decodePayload(payload: Uint8Array | undefined): JsonValue | undefined {
   if (!payload || payload.byteLength === 0) {
     return undefined;
   }
@@ -356,19 +354,19 @@ function decodePayload(payload: Uint8Array | undefined): unknown {
   const text = new TextDecoder().decode(payload);
 
   try {
-    return JSON.parse(text);
+    return parseJson(text);
   } catch {
     return text;
   }
 }
 
 export function safeAwsError(
-  error: unknown,
+  cause: unknown,
   fallbackCategory: "aws_deploy" | "aws_invoke",
 ): LambdaDevError {
-  if (error instanceof LambdaDevError) {
-    return error;
+  if (cause instanceof LambdaDevError) {
+    return cause;
   }
 
-  return toLambdaDevError(fallbackCategory, "AWS operation failed", error);
+  return toLambdaDevError(fallbackCategory, "AWS operation failed", cause);
 }

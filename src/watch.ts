@@ -1,4 +1,4 @@
-import chokidar, { type FSWatcher } from "chokidar";
+import chokidar from "chokidar";
 import path from "node:path";
 import { deployTarget, type RuntimeDeps } from "./core.js";
 import { loadTarget } from "./config.js";
@@ -7,15 +7,21 @@ import { formatError, logStep, type Logger } from "./output.js";
 
 type WatchFactoryOptions = Parameters<typeof chokidar.watch>[1];
 
+/** The parts of a chokidar watcher that watchTarget uses. */
+export interface FileWatcher {
+  on(event: "all", listener: (eventName: string, filePath: string) => void): void;
+  close(): Promise<void>;
+}
+
 export interface WatchOptions {
   configPath?: string;
   targetName?: string;
   logger: Logger;
   deps?: Partial<RuntimeDeps>;
-  watchFactory?: (paths: string[], options: WatchFactoryOptions) => Pick<FSWatcher, "on" | "close">;
+  watchFactory?: (paths: string[], options: WatchFactoryOptions) => FileWatcher;
 }
 
-export async function watchTarget(options: WatchOptions): Promise<Pick<FSWatcher, "on" | "close">> {
+export async function watchTarget(options: WatchOptions): Promise<FileWatcher> {
   const loaded = await loadTarget(options.configPath, options.targetName);
 
   const watchPlan = createWatchPlan(
@@ -122,7 +128,7 @@ export class SerializedDebouncedRunner {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
   private rerunRequested = false;
-  private waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
+  private waiters: Array<{ resolve: () => void; reject: (cause: unknown) => void }> = [];
 
   constructor(
     private readonly debounceMs: number,
@@ -177,11 +183,11 @@ export class SerializedDebouncedRunner {
     }
   }
 
-  private rejectWaiters(error: unknown): void {
+  private rejectWaiters(cause: unknown): void {
     const waiters = this.waiters.splice(0);
 
     for (const waiter of waiters) {
-      waiter.reject(error);
+      waiter.reject(cause);
     }
   }
 }

@@ -74,8 +74,10 @@ When invoking, the payload is chosen in this order. The first one that's set win
 
 With none set, the function is invoked with no payload. Note that a configured `payloadJson` takes priority over `--payload-file`.
 
+Payloads must be valid JSON and are always sent as JSON. A string payload is sent as a JSON string (`"hello"`), not as raw text, so to send an object write it as an object rather than as a string containing JSON.
+
 ## Output
 
-Each line is prefixed with the target and the stage: `[dev] build: ...`. After an invocation the CLI prints the status code, any `FunctionError`, the executed version, and a preview of the response payload (up to 500 characters). Payload previews redact values under keys that look like secrets, such as `password`, `apiKey`, or `secretAccessKey`.
+Each line is prefixed with the target and the stage: `[dev] build: ...`. After an invocation the CLI prints the status code, any `FunctionError`, the executed version, and a preview of the response payload (up to 500 characters). String values are shown in quotes, so `'123'` and `123` can be told apart. Payload previews redact values under keys that look like secrets, such as `password`, `apiKey`, or `secretAccessKey`.
 
 Errors print as `[category] message`, often followed by a `Hint:` line. The process exits with code `1`. See [Troubleshooting](troubleshooting.md) for each category.

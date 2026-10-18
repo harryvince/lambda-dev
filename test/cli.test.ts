@@ -2,6 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { createProgram } from "../src/cli.js";
 
 describe("cli", () => {
@@ -16,9 +17,9 @@ describe("cli", () => {
   });
 
   it("exposes only the aws-lambda-dev package bin", async () => {
-    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
-      bin: Record<string, string>;
-    };
+    const packageJson = z
+      .object({ bin: z.record(z.string(), z.string()) })
+      .parse(JSON.parse(await readFile("package.json", "utf8")));
 
     expect(packageJson.bin).toEqual({ "aws-lambda-dev": "dist/cli.js" });
     expect(packageJson.bin).not.toHaveProperty("lambda-dev");
@@ -41,7 +42,10 @@ describe("cli", () => {
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const execFileAsync = promisify(execFile);
-    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
+
+    const packageJson = z
+      .object({ version: z.string() })
+      .parse(JSON.parse(await readFile("package.json", "utf8")));
 
     await execFileAsync("bun", ["run", "build"]);
     const { stdout } = await execFileAsync("node", ["dist/cli.js", "--version"]);

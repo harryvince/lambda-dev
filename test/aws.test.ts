@@ -1,6 +1,7 @@
 import { TextEncoder } from "node:util";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import {
+  type LambdaClient,
   GetFunctionConfigurationCommand,
   UpdateFunctionConfigurationCommand,
   InvokeCommand,
@@ -13,7 +14,7 @@ import type { LoadedTarget } from "../src/config.js";
 describe("aws adapter", () => {
   it("updates Lambda function code with zip bytes", async () => {
     const send = vi.fn().mockResolvedValue({ Version: "7", $metadata: { requestId: "req-1" } });
-    const adapter = new AwsLambdaAdapter(() => ({ send }) as never);
+    const adapter = new AwsLambdaAdapter(fakeClient(send));
     const result = await adapter.updateFunctionCode(loadedTarget(), new Uint8Array([1, 2, 3]));
 
     expect(send).toHaveBeenCalledWith(expect.any(UpdateFunctionCodeCommand));
@@ -22,6 +23,20 @@ describe("aws adapter", () => {
       version: "7",
       requestId: "req-1",
     });
+  });
+
+  it("sends every payload as JSON, including strings", async () => {
+    const send = vi.fn().mockResolvedValue({ StatusCode: 200, $metadata: {} });
+    const adapter = new AwsLambdaAdapter(fakeClient(send));
+
+    await adapter.invokeFunction(loadedTarget(), "hello");
+    await adapter.invokeFunction(loadedTarget(), { ok: true });
+
+    const sent = send.mock.calls.map(([command]) =>
+      new TextDecoder().decode(command.input.Payload),
+    );
+
+    expect(sent).toEqual(['"hello"', '{"ok":true}']);
   });
 
   it("invokes Lambda and decodes response payload and log tail", async () => {
@@ -33,7 +48,7 @@ describe("aws adapter", () => {
       $metadata: { requestId: "req-2" },
     });
 
-    const adapter = new AwsLambdaAdapter(() => ({ send }) as never);
+    const adapter = new AwsLambdaAdapter(fakeClient(send));
     const result = await adapter.invokeFunction(loadedTarget(), { event: true });
 
     expect(send).toHaveBeenCalledWith(expect.any(InvokeCommand));
@@ -50,7 +65,7 @@ describe("aws adapter", () => {
     );
 
     const send = vi.fn().mockRejectedValue(credentialsError);
-    const adapter = new AwsLambdaAdapter(() => ({ send }) as never);
+    const adapter = new AwsLambdaAdapter(fakeClient(send));
 
     const target = {
       ...loadedTarget(),
@@ -77,6 +92,11 @@ describe("aws adapter", () => {
     expect(createLambdaClient(loadedTarget().target).config.profile).toBeUndefined();
   });
 });
+
+function fakeClient(send: Mock): () => LambdaClient {
+  // SAFETY: the adapter and the SDK's update waiter only call client.send(), which the mock provides.
+  return () => ({ send }) as never;
+}
 
 function loadedTarget(): LoadedTarget {
   return {
@@ -141,7 +161,7 @@ describe("Lambda environment synchronization", () => {
         }),
     );
 
-    const adapter = new AwsLambdaAdapter(() => ({ send }) as never, wait);
+    const adapter = new AwsLambdaAdapter(fakeClient(send), wait);
     const completed = vi.fn();
 
     const pending = adapter.updateEnvironment(patchedTarget()).then((result) => {
@@ -167,6 +187,7 @@ describe("Lambda environment synchronization", () => {
       }),
       { FunctionName: "dev-function" },
     ]);
+    // SAFETY: the adapter ignores the waiter's result, so any value releases it.
     release({ state: "SUCCESS" } as never);
     expect(await pending).toEqual({ changed: true, updatedCount: 2, deletedCount: 1 });
     expect(JSON.stringify(await pending)).not.toContain(PRIVATE_VALUE);
@@ -181,7 +202,7 @@ describe("Lambda environment synchronization", () => {
       .mockResolvedValueOnce(ready());
 
     const wait = vi.fn().mockResolvedValue({ state: "SUCCESS" });
-    await new AwsLambdaAdapter(() => ({ send }) as never, wait).updateEnvironment(patchedTarget());
+    await new AwsLambdaAdapter(fakeClient(send), wait).updateEnvironment(patchedTarget());
     expect(wait).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[2][0].input.RevisionId).toBe("fresh-rev");
     expect(send.mock.calls[2][0].input.Environment.Variables.RETAIN).toBe("yes");
@@ -190,7 +211,7 @@ describe("Lambda environment synchronization", () => {
   it("treats absent environment as empty and performs no work for omitted/empty patches", async () => {
     const send = vi.fn();
     const wait = vi.fn();
-    const adapter = new AwsLambdaAdapter(() => ({ send }) as never, wait);
+    const adapter = new AwsLambdaAdapter(fakeClient(send), wait);
     await adapter.updateEnvironment(loadedTarget());
     const empty = loadedTarget();
     empty.target.environment = {};
@@ -213,7 +234,7 @@ describe("Lambda environment synchronization", () => {
 
     const wait = vi.fn();
 
-    const result = await new AwsLambdaAdapter(() => ({ send }) as never, wait).updateEnvironment(
+    const result = await new AwsLambdaAdapter(fakeClient(send), wait).updateEnvironment(
       patchedTarget(),
     );
 
@@ -237,7 +258,7 @@ describe("Lambda environment synchronization", () => {
     { ...ready(), Environment: { Variables: { KEEP: PRIVATE_VALUE.repeat(500) } } },
   ])("fails closed on unsafe configuration response %#", async (configuration) => {
     const send = vi.fn().mockResolvedValue(configuration);
-    const adapter = new AwsLambdaAdapter(() => ({ send }) as never);
+    const adapter = new AwsLambdaAdapter(fakeClient(send));
 
     try {
       await adapter.updateEnvironment(patchedTarget());
@@ -257,7 +278,7 @@ describe("Lambda environment synchronization", () => {
       const send = vi.fn().mockResolvedValueOnce(ready()).mockRejectedValueOnce(failure);
 
       try {
-        await new AwsLambdaAdapter(() => ({ send }) as never).updateEnvironment(patchedTarget());
+        await new AwsLambdaAdapter(fakeClient(send)).updateEnvironment(patchedTarget());
         throw new Error("Expected rejection");
       } catch (error) {
         expect(error).toMatchObject({ category: "aws_configuration" });
@@ -278,9 +299,7 @@ describe("Lambda environment synchronization", () => {
         Object.assign(new Error(PRIVATE_VALUE), { name: "AccessDeniedException" }),
       );
 
-    const pending = new AwsLambdaAdapter(() => ({ send }) as never).updateEnvironment(
-      patchedTarget(),
-    );
+    const pending = new AwsLambdaAdapter(fakeClient(send)).updateEnvironment(patchedTarget());
 
     await expect(pending).rejects.toMatchObject({
       category: "aws_configuration",
@@ -297,7 +316,7 @@ describe("Lambda environment synchronization", () => {
       .mockRejectedValue(new Error(JSON.stringify({ reason: ready({ VALUE: PRIVATE_VALUE }) })));
 
     await expect(
-      new AwsLambdaAdapter(() => ({ send }) as never, wait).updateEnvironment(patchedTarget()),
+      new AwsLambdaAdapter(fakeClient(send), wait).updateEnvironment(patchedTarget()),
     ).rejects.toMatchObject({
       category: "aws_configuration",
       message: expect.stringContaining("environment update"),
@@ -308,7 +327,7 @@ describe("Lambda environment synchronization", () => {
 
   it("uses the real SDK configuration waiter and verifies Active after success", async () => {
     const send = vi.fn().mockResolvedValue(ready());
-    await new AwsLambdaAdapter(() => ({ send }) as never).waitForUpdate(patchedTarget());
+    await new AwsLambdaAdapter(fakeClient(send)).waitForUpdate(patchedTarget());
     expect(send).toHaveBeenCalledTimes(2);
     expect(
       send.mock.calls.every(([command]) => command instanceof GetFunctionConfigurationCommand),
@@ -318,7 +337,7 @@ describe("Lambda environment synchronization", () => {
       .mockResolvedValueOnce(ready())
       .mockResolvedValueOnce({ ...ready(), State: "Pending" });
     await expect(
-      new AwsLambdaAdapter(() => ({ send }) as never).waitForUpdate(patchedTarget()),
+      new AwsLambdaAdapter(fakeClient(send)).waitForUpdate(patchedTarget()),
     ).rejects.toMatchObject({ category: "aws_configuration" });
   });
 
@@ -330,7 +349,7 @@ describe("Lambda environment synchronization", () => {
     });
 
     await expect(
-      new AwsLambdaAdapter(() => ({ send }) as never).waitForUpdate(patchedTarget()),
+      new AwsLambdaAdapter(fakeClient(send)).waitForUpdate(patchedTarget()),
     ).rejects.toMatchObject({
       category: "aws_configuration",
       message: expect.stringContaining("code update"),
@@ -348,7 +367,7 @@ describe("Lambda environment synchronization", () => {
 
     const wait = vi.fn().mockResolvedValue({ state: "SUCCESS" });
     await expect(
-      new AwsLambdaAdapter(() => ({ send }) as never, wait).updateEnvironment(patchedTarget()),
+      new AwsLambdaAdapter(fakeClient(send), wait).updateEnvironment(patchedTarget()),
     ).rejects.toMatchObject({
       category: "aws_configuration",
       message: expect.not.stringContaining(PRIVATE_VALUE),
@@ -363,7 +382,7 @@ describe("Lambda environment synchronization", () => {
       .mockResolvedValue({ ...ready({ VALUE: PRIVATE_VALUE }), LastUpdateStatus: "InProgress" });
 
     const assertion = expect(
-      new AwsLambdaAdapter(() => ({ send }) as never).waitForUpdate(patchedTarget()),
+      new AwsLambdaAdapter(fakeClient(send)).waitForUpdate(patchedTarget()),
     ).rejects.toMatchObject({
       category: "aws_configuration",
       message: expect.stringContaining("code update"),
@@ -377,7 +396,7 @@ describe("Lambda environment synchronization", () => {
   it("sanitizes upload failures in environment-enabled deployments", async () => {
     const send = vi.fn().mockRejectedValue(new Error(PRIVATE_VALUE));
     await expect(
-      new AwsLambdaAdapter(() => ({ send }) as never).updateFunctionCode(
+      new AwsLambdaAdapter(fakeClient(send)).updateFunctionCode(
         patchedTarget(),
         new Uint8Array([1]),
       ),

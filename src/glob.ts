@@ -7,11 +7,18 @@ export function hasGlobSyntax(segment: string): boolean {
   return GLOB_SYNTAX.test(segment);
 }
 
+export interface GlobParts {
+  /** Literal directory before the first glob segment, or the pattern's directory if it has no glob. */
+  base: string;
+  /** The rest of the pattern from the first glob segment, or null when there's no glob syntax. */
+  glob: string | null;
+}
+
 /**
  * Split a POSIX-style pattern into the literal directory before its first glob segment and the rest.
  * A pattern without glob syntax has a null glob.
  */
-export function splitGlob(pattern: string): { base: string; glob: string | null } {
+export function splitGlob(pattern: string): GlobParts {
   const segments = pattern.split("/");
   const firstGlob = segments.findIndex(hasGlobSyntax);
 

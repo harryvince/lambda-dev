@@ -10,6 +10,7 @@ import {
 import { loadTarget, type LoadedTarget } from "./config.js";
 import { logStep, previewPayload, type Logger } from "./output.js";
 import { hasEnvironmentPatch, type EnvironmentUpdateResult } from "./environment.js";
+import { parseJson, type JsonValue } from "./json.js";
 
 export interface RuntimeDeps {
   buildArtifact: (loaded: LoadedTarget) => Promise<BuildResult>;
@@ -96,8 +97,14 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
 
   const shouldInvoke = options.invoke ?? loaded.target.invoke.afterDeploy;
 
+  const summary: DeploySummary = { build, deploy };
+
+  if (environment) {
+    summary.environment = environment;
+  }
+
   if (!shouldInvoke) {
-    return { build, deploy, ...(environment ? { environment } : {}) };
+    return summary;
   }
 
   const payload = await resolvePayload(loaded, options.payloadFile, options.payloadJson);
@@ -105,7 +112,9 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
   const invoke = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
   logStep(options.logger, loaded.targetName, "invoke", formatInvokeSummary(invoke));
 
-  return { build, deploy, invoke, ...(environment ? { environment } : {}) };
+  summary.invoke = invoke;
+
+  return summary;
 }
 
 export async function invokeTarget(options: InvokeOptions): Promise<InvokeResult> {
@@ -130,9 +139,9 @@ export async function resolvePayload(
   loaded: LoadedTarget,
   payloadFile?: string,
   payloadJson?: string,
-): Promise<unknown> {
+): Promise<JsonValue | undefined> {
   if (payloadJson !== undefined) {
-    return JSON.parse(payloadJson);
+    return parseJson(payloadJson);
   }
 
   const configuredPayload = loaded.target.invoke.payloadJson;
@@ -149,7 +158,7 @@ export async function resolvePayload(
 
   const raw = await readFile(path.resolve(loaded.projectRoot, file), "utf8");
 
-  return JSON.parse(raw);
+  return parseJson(raw);
 }
 
 export function formatInvokeSummary(result: InvokeResult): string {

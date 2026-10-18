@@ -181,7 +181,7 @@ async function optionalStat(file: string) {
   try {
     return await lstat(file);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
     throw error;
   }
 }

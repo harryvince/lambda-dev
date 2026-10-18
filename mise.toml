@@ -8,7 +8,7 @@ description = "Install dependencies with Bun."
 run = "bun install"
 
 [tasks.typecheck]
-description = "Typecheck the TypeScript project."
+description = "Typecheck source, tests, and scripts."
 run = "bun run typecheck"
 
 [tasks.test]
@@ -37,9 +37,21 @@ run = "semgrep scan --metrics=off --error --config p/default --config p/typescri
 description = "Run all security scans."
 depends = ["scan:deps", "scan:code"]
 
+[tasks.lint]
+description = "Lint with oxlint and the vendored anti-slop rules."
+run = "bun run lint"
+
+[tasks.format]
+description = "Format the code with oxfmt."
+run = "bun run format"
+
+[tasks."format:check"]
+description = "Check formatting without writing changes."
+run = "bun run format:check"
+
 [tasks.check]
-description = "Run typecheck, tests, and build with Bun."
-depends = ["typecheck", "test", "build"]
+description = "Run format check, lint, typecheck, tests, and build."
+depends = ["format:check", "lint", "typecheck", "test", "build"]
 
 [tasks.clean]
 description = "Remove generated package artifacts."

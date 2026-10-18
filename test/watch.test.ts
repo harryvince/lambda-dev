@@ -121,8 +121,7 @@ targets:
 `,
     );
 
-    const watcher = new EventEmitter() as EventEmitter & { close: () => Promise<void> };
-    watcher.close = vi.fn().mockResolvedValue(undefined);
+    const watcher = new FakeWatcher();
 
     const buildArtifact = vi.fn().mockResolvedValue({
       artifactPath: path.join(root, "function.zip"),
@@ -144,7 +143,7 @@ targets:
       configPath: path.join(root, "lambda-dev.yml"),
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       deps: { buildArtifact, lambda },
-      watchFactory: () => watcher as never,
+      watchFactory: () => watcher,
     });
 
     watcher.emit("all", "change", path.join(root, ".lambda-dev", "index.js"));
@@ -173,3 +172,7 @@ targets:
     expect(lambda.waitForUpdate).toHaveBeenCalledOnce();
   });
 });
+
+class FakeWatcher extends EventEmitter {
+  close = vi.fn().mockResolvedValue(undefined);
+}

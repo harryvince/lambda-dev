@@ -18,11 +18,13 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
-    "check": "bun run typecheck && bun run test && bun run build",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run build",
     "clean": "rm -rf dist .lambda-dev lambda-dev-*.tgz aws-lambda-dev-*.tgz",
-    "lint": "tsc -p tsconfig.json --noEmit",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.check.json"
   },
   "dependencies": {
     "@aws-sdk/client-lambda": "3.1076.0",

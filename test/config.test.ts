@@ -242,7 +242,7 @@ targets:
         throw new Error("Expected rejection");
       } catch (error) {
         expect(error).toMatchObject({ category: "validation" });
-        expect((error as Error).message).not.toContain("FAKE_PRIVATE_VALUE");
+        expect(String(error)).not.toContain("FAKE_PRIVATE_VALUE");
         expect(JSON.stringify(error)).not.toContain("FAKE_PRIVATE_VALUE");
       }
     },

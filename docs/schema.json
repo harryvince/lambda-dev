@@ -247,7 +247,12 @@
                 "type": "string"
               },
               "payloadJson": {
-                "description": "Inline event. Takes priority over payload files."
+                "description": "Inline event. Takes priority over payload files.",
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema0"
+                  }
+                ]
               },
               "logType": {
                 "default": "Tail",
@@ -280,5 +285,38 @@
   ],
   "additionalProperties": false,
   "title": "aws-lambda-dev config",
-  "description": "Configuration for aws-lambda-dev (lambda-dev.yml)."
+  "description": "Configuration for aws-lambda-dev (lambda-dev.yml).",
+  "definitions": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/__schema0"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema0"
+          }
+        }
+      ]
+    }
+  }
 }

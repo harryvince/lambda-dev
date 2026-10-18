@@ -4,6 +4,7 @@ import { parse, YAMLParseError } from "yaml";
 import { z } from "zod";
 import { LambdaDevError } from "./errors.js";
 import { RESERVED_ENVIRONMENT_KEYS } from "./environment.js";
+import { jsonValueSchema } from "./json.js";
 
 const environmentKey = z
   .string()
@@ -107,8 +108,7 @@ const invokeSchema = z
       .string()
       .optional()
       .meta({ description: "JSON event file, relative to the config file." }),
-    payloadJson: z
-      .unknown()
+    payloadJson: jsonValueSchema
       .optional()
       .meta({ description: "Inline event. Takes priority over payload files." }),
     logType: z

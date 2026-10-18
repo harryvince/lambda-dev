@@ -10,6 +10,24 @@ describe("output", () => {
     });
   });
 
+  it("redacts inline AWS credential assignments inside strings and arrays", () => {
+    expect(
+      redact({
+        command: "AWS_SECRET_ACCESS_KEY=abc123 node app.js",
+        list: ['AWS_SESSION_TOKEN=tok"en', "keep me"],
+      }),
+    ).toEqual({
+      command: "AWS_SECRET_ACCESS_KEY=[redacted] node app.js",
+      list: ['AWS_SESSION_TOKEN=[redacted]"en', "keep me"],
+    });
+  });
+
+  it("shows strings quoted so they can't be confused with other JSON values", () => {
+    expect(previewPayload("123")).toBe("'123'");
+    expect(previewPayload(123)).toBe("123");
+    expect(previewPayload(undefined)).toBe("undefined");
+  });
+
   it("truncates oversized payload previews", () => {
     const preview = previewPayload({ body: "a".repeat(40) }, 20);
     expect(preview).toContain("[truncated");
