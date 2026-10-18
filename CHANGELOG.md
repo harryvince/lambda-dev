@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.2.0](https://github.com/harryvince/lambda-dev/compare/v2.1.0...v2.2.0) (2026-10-18)
+
+
+### Features
+
+* cache builds so targets with identical inputs reuse one zip ([ab31411](https://github.com/harryvince/lambda-dev/commit/ab31411b8025ba6b79b755ec7d178c9fff176e06))
+
 ## [2.1.0](https://github.com/harryvince/lambda-dev/compare/v2.0.0...v2.1.0) (2026-10-18)
 
 
