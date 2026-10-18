@@ -48,7 +48,7 @@ A previous step may already have completed, so check the function's state in the
 
 ## `aws_deploy`
 
-The code upload failed. Usually credentials, region, function name, or a missing `lambda:UpdateFunctionCode` permission. If the target has `environment`, the environment update may already have been applied.
+The code upload failed. Usually credentials, region, function name, or a missing `lambda:UpdateFunctionCode` permission. If credentials couldn't be loaded at all, the hint names the `profile` to check; for SSO profiles, run `aws sso login --profile <name>` first. If the target has `environment`, the environment update may already have been applied.
 
 ## `aws_invoke`
 

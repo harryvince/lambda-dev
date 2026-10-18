@@ -124,7 +124,7 @@ Options passed to esbuild. The output is always a single `index.js` (plus `index
 | `exclude` | `["node_modules/**", "dist/**", ".lambda-dev/**"]` | Globs to ignore, even if included. |
 | `debounceMs` | `300` | Quiet period after the last change before deploying. |
 
-Globs support `*`, `**`, and `?`. Keep your build output excluded, or each build will trigger another.
+Globs use the same syntax as [`build.copy`](copying-files.md): `*`, `**`, `?`, character classes like `[abc]`, and braces like `*.{ts,json}`. Unlike copy globs, watch globs also match dotfiles. Keep your build output excluded, or each build will trigger another.
 
 ## `invoke`
 

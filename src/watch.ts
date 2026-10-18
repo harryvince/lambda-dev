@@ -1,5 +1,6 @@
 import chokidar, { type FSWatcher } from "chokidar";
 import path from "node:path";
+import picomatch from "picomatch";
 import { deployTarget, type RuntimeDeps } from "./core.js";
 import { loadTarget } from "./config.js";
 import { formatError, logStep, type Logger } from "./output.js";
@@ -91,64 +92,14 @@ export function createWatchPlan(
 
 function getWatchRoot(pattern: string): string {
   const unixPattern = toUnixPath(pattern);
-  const wildcardIndex = unixPattern.search(/[*[{?]/);
-  const stablePrefix = wildcardIndex === -1 ? unixPattern : unixPattern.slice(0, wildcardIndex);
-  const directory = stablePrefix.endsWith("/")
-    ? stablePrefix.slice(0, -1)
-    : path.posix.dirname(stablePrefix);
-
-  if (!directory || directory === ".") {
-    return ".";
-  }
-
-  return directory;
+  const { base, isGlob } = picomatch.scan(unixPattern);
+  const directory = isGlob ? base : path.posix.dirname(unixPattern);
+  return directory || ".";
 }
 
 function createMatcher(pattern: string): (relativePath: string) => boolean {
-  const normalizedPattern = toUnixPath(pattern).replace(/^\.\/+/, "");
-  const regex = globToRegExp(normalizedPattern);
-  return (relativePath: string) => regex.test(relativePath);
-}
-
-function globToRegExp(pattern: string): RegExp {
-  let source = "^";
-  for (let index = 0; index < pattern.length; index += 1) {
-    const char = pattern[index];
-    const next = pattern[index + 1];
-
-    if (char === "*" && next === "*") {
-      const afterNext = pattern[index + 2];
-      if (afterNext === "/") {
-        source += "(?:.*/)?";
-        index += 2;
-      } else {
-        source += ".*";
-        index += 1;
-      }
-      continue;
-    }
-
-    if (char === "*") {
-      source += "[^/]*";
-      continue;
-    }
-
-    if (char === "?") {
-      source += "[^/]";
-      continue;
-    }
-
-    source += escapeRegExp(char);
-  }
-
-  // The pattern comes from the user's own watch config, every regex metacharacter is escaped above,
-  // and it only ever matches local file paths, so it isn't an untrusted-input ReDoS risk.
-  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
-  return new RegExp(`${source}$`);
-}
-
-function escapeRegExp(char: string): string {
-  return /[\\^$.*+?()[\]{}|]/.test(char) ? `\\${char}` : char;
+  // Same glob syntax as build.copy (tinyglobby uses picomatch); dot keeps dotfiles matchable by * and **.
+  return picomatch(toUnixPath(pattern).replace(/^\.\/+/, ""), { dot: true });
 }
 
 function toRelativeUnixPath(projectRoot: string, filePath: string): string {

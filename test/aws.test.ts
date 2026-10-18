@@ -35,9 +35,32 @@ describe("aws adapter", () => {
     expect(result.logTail).toBe("hello logs");
   });
 
+  it("names the configured profile when credentials can't be loaded", async () => {
+    const credentialsError = Object.assign(new Error("Could not load credentials from any providers"), {
+      name: "CredentialsProviderError",
+    });
+    const send = vi.fn().mockRejectedValue(credentialsError);
+    const adapter = new AwsLambdaAdapter(() => ({ send }) as never);
+    const target = { ...loadedTarget(), target: { ...loadedTarget().target, profile: "dev-profile" } };
+
+    await expect(adapter.updateFunctionCode(target, new Uint8Array([1]))).rejects.toMatchObject({
+      category: "aws_deploy",
+      hint: expect.stringContaining('AWS profile "dev-profile"'),
+    });
+    await expect(adapter.invokeFunction(loadedTarget(), {})).rejects.toMatchObject({
+      category: "aws_invoke",
+      hint: expect.stringContaining("No AWS credentials found"),
+    });
+  });
+
   it("creates a client for region/profile configuration", () => {
     const client = createLambdaClient({ ...loadedTarget().target, profile: "dev-profile" });
     expect(client.config.region).toBeDefined();
+    expect(client.config.profile).toBe("dev-profile");
+  });
+
+  it("leaves the profile unset so the default credential chain applies", () => {
+    expect(createLambdaClient(loadedTarget().target).config.profile).toBeUndefined();
   });
 });
 

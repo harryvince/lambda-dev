@@ -70,6 +70,33 @@ describe("watch pattern handling", () => {
     expect(plan.shouldHandle(path.join(root, "src", "generated", "handler.ts"))).toBe(false);
   });
 
+  it("watches the config directory for a plain file pattern", () => {
+    const root = path.resolve("/tmp/project");
+    const plan = createWatchPlan(root, ["lambda-dev.yml", "./assets/**/*"], []);
+
+    expect(plan.roots).toEqual([root, path.join(root, "assets")]);
+    expect(plan.shouldHandle(path.join(root, "lambda-dev.yml"))).toBe(true);
+    expect(plan.shouldHandle(path.join(root, "assets", "schema.json"))).toBe(true);
+    expect(plan.shouldHandle(path.join(root, "other.yml"))).toBe(false);
+  });
+
+  it("matches dotfiles and supports braces like build.copy globs", () => {
+    const root = path.resolve("/tmp/project");
+    const plan = createWatchPlan(root, ["src/**/*.{ts,json}"], []);
+
+    expect(plan.shouldHandle(path.join(root, "src", ".hidden", "config.json"))).toBe(true);
+    expect(plan.shouldHandle(path.join(root, "src", "handler.ts"))).toBe(true);
+    expect(plan.shouldHandle(path.join(root, "src", "handler.js"))).toBe(false);
+  });
+
+  it("ignores excluded directories themselves so the watcher skips them", () => {
+    const root = path.resolve("/tmp/project");
+    const plan = createWatchPlan(root, ["**/*.ts"], ["node_modules/**"]);
+
+    expect(plan.isIgnored(path.join(root, "node_modules"))).toBe(true);
+    expect(plan.isIgnored(path.join(root, "src"))).toBe(false);
+  });
+
   it("runs deploy for fake watcher events that match include patterns", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "aws-lambda-dev-watch-"));
     await writeFile(

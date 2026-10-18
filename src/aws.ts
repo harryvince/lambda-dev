@@ -9,7 +9,6 @@ import {
   type GetFunctionConfigurationCommandOutput,
   type LambdaClientConfig,
 } from "@aws-sdk/client-lambda";
-import { fromIni } from "@aws-sdk/credential-providers";
 import { LambdaDevError, toLambdaDevError } from "./errors.js";
 import type { LoadedTarget } from "./config.js";
 import { applyEnvironmentPatch, hasEnvironmentPatch, type EnvironmentUpdateResult } from "./environment.js";
@@ -44,7 +43,9 @@ export interface LambdaAdapter {
 export function createLambdaClient(target: LoadedTarget["target"]): LambdaClient {
   const config: LambdaClientConfig = { region: target.region };
   if (target.profile) {
-    config.credentials = fromIni({ profile: target.profile });
+    // The default credential chain uses this profile ahead of environment credentials,
+    // including SSO and credential_process profiles.
+    config.profile = target.profile;
   }
   return new LambdaClient(config);
 }
@@ -86,7 +87,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
       return result;
     } catch (error) {
       if (error instanceof LambdaDevError) throw error;
-      throw environmentAwsError(error, "Failed to synchronize Lambda environment");
+      throw withCredentialsHint(environmentAwsError(error, "Failed to synchronize Lambda environment"), error, loaded.target.profile);
     }
   }
 
@@ -97,7 +98,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
       this.assertReady(await this.readConfiguration(client, loaded), true);
     } catch (error) {
       if (error instanceof LambdaDevError) throw error;
-      throw environmentAwsError(error, "Failed waiting for Lambda code update completion");
+      throw withCredentialsHint(environmentAwsError(error, "Failed waiting for Lambda code update completion"), error, loaded.target.profile);
     }
   }
 
@@ -167,9 +168,13 @@ export class AwsLambdaAdapter implements LambdaAdapter {
       };
     } catch (error) {
       if (hasEnvironmentPatch(loaded.target.environment)) {
-        throw environmentAwsError(error, "Failed to upload Lambda code; environment synchronization already completed", "aws_deploy");
+        throw withCredentialsHint(
+          environmentAwsError(error, "Failed to upload Lambda code; environment synchronization already completed", "aws_deploy"),
+          error,
+          loaded.target.profile,
+        );
       }
-      throw toLambdaDevError("aws_deploy", `Failed to upload ${loaded.target.functionName}`, error);
+      throw withCredentialsHint(toLambdaDevError("aws_deploy", `Failed to upload ${loaded.target.functionName}`, error), error, loaded.target.profile);
     }
   }
 
@@ -201,7 +206,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
         payload: decodePayload(result.Payload),
       };
     } catch (error) {
-      throw toLambdaDevError("aws_invoke", `Failed to invoke ${loaded.target.functionName}`, error);
+      throw withCredentialsHint(toLambdaDevError("aws_invoke", `Failed to invoke ${loaded.target.functionName}`, error), error, loaded.target.profile);
     }
   }
 }
@@ -222,6 +227,14 @@ function environmentAwsError(
       ? "Configuration changed concurrently. Rerun the deployment to read a fresh revision; no stale write was retried."
       : "Check Lambda status and IAM/KMS permissions, then retry when stable. Earlier remote changes may already have completed.",
   });
+}
+
+function withCredentialsHint(error: LambdaDevError, cause: unknown, profile?: string): LambdaDevError {
+  if (!(cause instanceof Error) || cause.name !== "CredentialsProviderError") return error;
+  const hint = profile
+    ? `Check that AWS profile "${profile}" exists in your AWS config and has valid credentials (for SSO, run: aws sso login --profile ${profile}).`
+    : "No AWS credentials found. Set profile in lambda-dev.yml, or configure credentials with environment variables, ~/.aws, or SSO.";
+  return new LambdaDevError(error.category, error.message, { hint, cause });
 }
 
 function encodePayload(payload: unknown): Uint8Array | undefined {
