@@ -80,13 +80,16 @@ describe("watch pattern handling", () => {
     expect(plan.shouldHandle(path.join(root, "other.yml"))).toBe(false);
   });
 
-  it("matches dotfiles and supports braces like build.copy globs", () => {
+  it("supports braces and skips dotfiles unless named, like build.copy globs", () => {
     const root = path.resolve("/tmp/project");
-    const plan = createWatchPlan(root, ["src/**/*.{ts,json}"], []);
+    const plan = createWatchPlan(root, ["src/**/*.{ts,json}", "src/.env"], []);
 
-    expect(plan.shouldHandle(path.join(root, "src", ".hidden", "config.json"))).toBe(true);
     expect(plan.shouldHandle(path.join(root, "src", "handler.ts"))).toBe(true);
+    expect(plan.shouldHandle(path.join(root, "src", "nested", "config.json"))).toBe(true);
     expect(plan.shouldHandle(path.join(root, "src", "handler.js"))).toBe(false);
+    expect(plan.shouldHandle(path.join(root, "src", ".handler.ts.swp"))).toBe(false);
+    expect(plan.shouldHandle(path.join(root, "src", ".hidden", "config.json"))).toBe(false);
+    expect(plan.shouldHandle(path.join(root, "src", ".env"))).toBe(true);
   });
 
   it("ignores excluded directories themselves so the watcher skips them", () => {

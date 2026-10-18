@@ -1,6 +1,6 @@
-import { lstat, readdir, realpath } from "node:fs/promises";
+import { glob, lstat, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
-import { glob, isDynamicPattern } from "tinyglobby";
+import { splitGlob, toUnixPath as toUnix } from "./glob.js";
 import type { LoadedTarget } from "./config.js";
 
 export interface CopyAsset {
@@ -66,23 +66,19 @@ export async function createCopyManifest(loaded: LoadedTarget): Promise<CopyAsse
         continue;
       }
 
-      const segments = entry.from.split(path.sep);
-      const dynamic = segments.findIndex((segment) => isDynamicPattern(segment));
-      if (dynamic === -1 || entry.from.startsWith("!")) {
+      const { base: literalBase, glob: pattern } = splitGlob(toUnix(entry.from));
+      if (pattern === null || entry.from.startsWith("!")) {
         throw new Error(`Copy source does not exist: ${entry.from}`);
       }
-      const base = path.resolve(root, segments.slice(0, dynamic).join(path.sep) || ".");
-      const pattern = toUnix(segments.slice(dynamic).join(path.sep));
+      const base = path.resolve(root, literalBase);
       await assertNoSymlinks(base);
       assertOutsideOutput(base, output, true);
       // Validate the scanned tree without following links; glob libraries can silently skip links.
       await walk(base, async () => {});
-      const matches = await glob(pattern, {
-        cwd: base,
-        onlyFiles: true,
-        expandDirectories: false,
-        followSymbolicLinks: false,
-      });
+      const matches: string[] = [];
+      for await (const match of glob(pattern, { cwd: base, withFileTypes: true })) {
+        if (match.isFile()) matches.push(toUnix(path.relative(base, path.join(match.parentPath, match.name))));
+      }
       if (matches.length === 0) throw new Error(`Copy pattern matched no files: ${entry.from}`);
       for (const match of matches.sort()) {
         const file = path.resolve(base, match);
@@ -156,8 +152,4 @@ async function walk(
   if (info.isDirectory()) {
     for (const name of (await readdir(file)).sort()) await walk(path.join(file, name), visit);
   }
-}
-
-function toUnix(value: string): string {
-  return value.split(path.sep).join("/");
 }

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js 20 or later.**
+- **Node.js 22.20 or later, or 24.8 or later.** The CLI uses Node's built-in glob support, which is stable from those versions. This is only for running the CLI; your function can use any Node.js Lambda runtime.
 - **An existing Lambda function** using a Node.js runtime, ideally a dedicated development copy.
 - **AWS credentials** that the AWS SDK can find: environment variables, `~/.aws/credentials`, SSO, or an instance/container role. You can also name a profile per target. The credentials need the permissions in [IAM permissions](iam-permissions.md).
 

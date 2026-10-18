@@ -1,8 +1,8 @@
 import chokidar, { type FSWatcher } from "chokidar";
 import path from "node:path";
-import picomatch from "picomatch";
 import { deployTarget, type RuntimeDeps } from "./core.js";
 import { loadTarget } from "./config.js";
+import { splitGlob, toUnixPath } from "./glob.js";
 import { formatError, logStep, type Logger } from "./output.js";
 
 type WatchFactoryOptions = Parameters<typeof chokidar.watch>[1];
@@ -91,24 +91,22 @@ export function createWatchPlan(
 }
 
 function getWatchRoot(pattern: string): string {
-  const unixPattern = toUnixPath(pattern);
-  const { base, isGlob } = picomatch.scan(unixPattern);
-  const directory = isGlob ? base : path.posix.dirname(unixPattern);
-  return directory || ".";
+  return splitGlob(toUnixPath(pattern).replace(/^\.\/+/, "")).base;
 }
 
 function createMatcher(pattern: string): (relativePath: string) => boolean {
-  // Same glob syntax as build.copy (tinyglobby uses picomatch); dot keeps dotfiles matchable by * and **.
-  return picomatch(toUnixPath(pattern).replace(/^\.\/+/, ""), { dot: true });
+  const normalizedPattern = toUnixPath(pattern).replace(/^\.\/+/, "");
+  // A "dir/**" pattern also matches "dir" itself, so excluded directories aren't walked at all.
+  const directoryPattern = normalizedPattern.endsWith("/**") ? normalizedPattern.slice(0, -3) : undefined;
+  return (relativePath: string) =>
+    path.posix.matchesGlob(relativePath, normalizedPattern) ||
+    (directoryPattern !== undefined && path.posix.matchesGlob(relativePath, directoryPattern));
 }
 
 function toRelativeUnixPath(projectRoot: string, filePath: string): string {
   return toUnixPath(path.relative(projectRoot, path.resolve(filePath)));
 }
 
-function toUnixPath(value: string): string {
-  return value.split(path.sep).join("/");
-}
 
 export class SerializedDebouncedRunner {
   private timer: NodeJS.Timeout | undefined;
