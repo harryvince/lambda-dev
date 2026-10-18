@@ -12,6 +12,7 @@ mise run install      # bun install + prek install (Git hooks)
 mise run fix          # oxlint --fix + oxfmt until stable
 mise run check        # format check + lint + typecheck + test + build — run before finishing any change
 mise run test         # vitest run
+mise run test:e2e     # end-to-end tests against a local MiniStack emulator (needs uv)
 mise run typecheck    # tsc over src, test, and scripts
 mise run scan         # Trivy dependency scan + Semgrep code scan
 prek run --all-files  # every Git hook
@@ -43,7 +44,7 @@ Releases go through `mise run version` (standard-version: bumps `package.json`, 
 | `examples/lambda-dev.yml` | Example config shipped in the package.                                                                                                                                                    |
 | `tools/oxlint/anti-slop/` | Vendored anti-slop oxlint rules (owned here; provenance in `UPSTREAM.md`).                                                                                                                |
 
-Tests live in `test/<module>.test.ts`, named after the source module they cover.
+Tests live in `test/<module>.test.ts`, named after the source module they cover. End-to-end tests live in `test/e2e/` and run only through `mise run test:e2e`, which starts [MiniStack](https://github.com/ministackorg/ministack) on port 4599 with fake credentials; they refuse to run unless `AWS_ENDPOINT_URL` is a localhost URL. Run them after changing anything that talks to AWS.
 
 User documentation is a [Zensical](https://zensical.org) site: Markdown pages in `docs/`, navigation and theme in `zensical.toml`. Preview with `mise run docs:serve`; `mise run docs:build` builds with `--strict`, so broken links fail. `.github/workflows/docs.yml` deploys it to GitHub Pages on pushes to `main`.
 

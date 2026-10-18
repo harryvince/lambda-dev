@@ -39,7 +39,17 @@ mise run test          # tests only
 mise run typecheck     # types for src, tests, and scripts
 ```
 
-Tests use Vitest and never call AWS; they inject fake Lambda clients and build functions. Run `mise run check` before opening a pull request. The publish workflow runs it too, so a release can't go out with lint or format errors.
+Tests use Vitest and never call AWS; they inject fake Lambda clients and build functions. Run `mise run check` before opening a pull request.
+
+### End-to-end tests
+
+```bash
+mise run test:e2e
+```
+
+The tests in `test/e2e/` run the real CLI code against [MiniStack](https://github.com/ministackorg/ministack), a free local AWS emulator. The task starts MiniStack on port 4599 (pinned, fetched with `uvx`), creates a real Node.js function in it, then deploys, syncs environment variables, invokes, snapshots and rolls back, and stops MiniStack when it's done. It takes about ten seconds.
+
+The task sets `AWS_ENDPOINT_URL`, which the AWS SDK uses in place of the real endpoints, along with fake credentials, and hides your AWS config files. The tests also refuse to start unless `AWS_ENDPOINT_URL` is a localhost URL, so they can't reach a real account. Run them after changing anything that talks to AWS (`src/aws.ts`, `src/core.ts`, `src/snapshot.ts`). The publish workflow runs it too, so a release can't go out with lint or format errors.
 
 ## Lint rules
 

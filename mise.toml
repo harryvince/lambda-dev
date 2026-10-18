@@ -16,6 +16,19 @@ run = "bun run typecheck"
 description = "Run the test suite with Bun."
 run = "bun run test"
 
+[tasks."test:e2e"]
+description = "Run the end-to-end tests against a local MiniStack AWS emulator."
+# Static fake credentials and no config files, so these tests can never reach real AWS.
+env = { GATEWAY_PORT = "4599", AWS_ENDPOINT_URL = "http://localhost:4599", AWS_ACCESS_KEY_ID = "test", AWS_SECRET_ACCESS_KEY = "test", AWS_REGION = "eu-west-2", AWS_CONFIG_FILE = "/dev/null", AWS_SHARED_CREDENTIALS_FILE = "/dev/null" }
+run = """
+set -e
+unset AWS_PROFILE AWS_SESSION_TOKEN
+uvx ministack@1.5.20 -d
+trap 'uvx ministack@1.5.20 --stop' EXIT
+curl -sf --retry 30 --retry-delay 1 --retry-connrefused -o /dev/null "$AWS_ENDPOINT_URL/_localstack/health"
+bun run test:e2e
+"""
+
 [tasks.build]
 description = "Build the TypeScript package."
 run = "bun run build"
