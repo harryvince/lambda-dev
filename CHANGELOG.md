@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.5.0](https://github.com/harryvince/lambda-dev/compare/v2.4.0...v2.5.0) (2026-10-18)
+
+
+### Features
+
+* roll back a deploy when its checks or invoke.expect fail ([703024b](https://github.com/harryvince/lambda-dev/commit/703024b9e6febeec5ade446e1e0f1c5c2bb81fa3))
+
 ## [2.4.0](https://github.com/harryvince/lambda-dev/compare/v2.3.0...v2.4.0) (2026-10-18)
 
 
