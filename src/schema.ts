@@ -10,5 +10,6 @@ export function createConfigJsonSchema(): Record<string, unknown> {
     io: "input",
     unrepresentable: "any",
   });
+
   return { $schema, $id: CONFIG_SCHEMA_URL, ...schema };
 }

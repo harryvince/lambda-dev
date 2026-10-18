@@ -3,6 +3,7 @@ import { LambdaDevError } from "./errors.js";
 
 const SECRET_KEY_PATTERN =
   /(access[_-]?key|secret|session[_-]?token|password|credential|authorization|api[_-]?key)/i;
+
 const MAX_PREVIEW_CHARS = 2000;
 
 export interface Logger {
@@ -24,9 +25,11 @@ export function redact(value: unknown): unknown {
 
   if (value && typeof value === "object") {
     const redacted: Record<string, unknown> = {};
+
     for (const [key, entry] of Object.entries(value)) {
       redacted[key] = SECRET_KEY_PATTERN.test(key) ? "[redacted]" : redact(entry);
     }
+
     return redacted;
   }
 
@@ -42,6 +45,7 @@ export function redact(value: unknown): unknown {
 
 export function previewPayload(value: unknown, maxChars = MAX_PREVIEW_CHARS): string {
   const redacted = redact(value);
+
   const rendered =
     typeof redacted === "string" ? redacted : inspect(redacted, { depth: 6, colors: false });
 
@@ -55,6 +59,7 @@ export function previewPayload(value: unknown, maxChars = MAX_PREVIEW_CHARS): st
 export function formatError(error: unknown): string {
   if (error instanceof LambdaDevError) {
     const hint = error.hint ? `\nHint: ${error.hint}` : "";
+
     return `[${error.category}] ${error.message}${hint}`;
   }
 

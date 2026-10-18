@@ -46,10 +46,10 @@ describe("buildArtifact", () => {
   });
 });
 
-
 describe("copy build integration", () => {
   it("packages YAML-anchored runtime assets with binary bytes and executable permissions, and cleans stale assets", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "lambda-runtime-"));
+
     try {
       await mkdir(path.join(root, "assets/nested"), { recursive: true });
       await mkdir(path.join(root, "assets/empty"));
@@ -57,13 +57,18 @@ describe("copy build integration", () => {
       await writeFile(path.join(root, "assets/helper"), binary);
       await chmod(path.join(root, "assets/helper"), 0o755);
       await writeFile(path.join(root, "assets/nested/value.txt"), "runtime loaded");
-      await writeFile(path.join(root, "handler.ts"), `
+      await writeFile(
+        path.join(root, "handler.ts"),
+        `
         import { readFileSync } from "node:fs";
         import path from "node:path";
         export const handler = () => readFileSync(path.join(__dirname, "runtime/nested/value.txt"), "utf8");
-      `);
+      `,
+      );
       const configPath = path.join(root, "lambda-dev.yml");
-      await writeFile(configPath, `version: 1
+      await writeFile(
+        configPath,
+        `version: 1
 targets:
   dev:
     functionName: dev
@@ -80,7 +85,8 @@ targets:
       <<: *build
       minify: true
       copy: *copy
-`);
+`,
+      );
       const loaded = await loadTarget(configPath, "staging");
       const result = await buildArtifact(loaded);
       const zip = new AdmZip(result.artifactPath);
@@ -103,7 +109,9 @@ targets:
       await rm(path.join(root, "assets/helper"));
       const rebuilt = await buildArtifact(loaded);
       expect(new AdmZip(rebuilt.artifactPath).getEntry("runtime/helper")).toBeNull();
-      await expect(stat(path.join(output, "runtime/helper"))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(path.join(output, "runtime/helper"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

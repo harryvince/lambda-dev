@@ -65,5 +65,6 @@ targets:
       entry: src/handler.ts
 `,
   );
+
   return configPath;
 }

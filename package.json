@@ -34,8 +34,11 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.88.0",
     "@types/adm-zip": "0.5.8",
     "@types/node": "26.0.1",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
     "typescript": "6.0.3",
     "vitest": "4.1.11"
   },

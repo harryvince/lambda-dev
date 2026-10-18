@@ -88,6 +88,7 @@ export function createProgram(): Command {
 
 export async function main(argv = process.argv): Promise<void> {
   const program = createProgram();
+
   try {
     await program.parseAsync(argv);
   } catch (error) {
@@ -116,8 +117,10 @@ function readPackageVersionSyncFallback(): string {
   // Commander needs the version during program construction. Keep this fallback
   // tiny so release versioning remains owned by package.json and mise.
   const packageUrl = new URL("../package.json", import.meta.url);
+
   try {
     const packageJson = JSON.parse(readFileSync(packageUrl, "utf8")) as { version?: unknown };
+
     return typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
   } catch {
     return "0.0.0";

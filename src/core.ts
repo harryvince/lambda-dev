@@ -55,12 +55,23 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
   );
 
   let environment: EnvironmentUpdateResult | undefined;
+
   if (hasEnvironmentPatch(loaded.target.environment)) {
-    logStep(options.logger, loaded.targetName, "configuration", "Synchronizing environment variables");
+    logStep(
+      options.logger,
+      loaded.targetName,
+      "configuration",
+      "Synchronizing environment variables",
+    );
     environment = await deps.lambda.updateEnvironment(loaded);
-    logStep(options.logger, loaded.targetName, "configuration", environment.changed
-      ? `Updated ${environment.updatedCount} and deleted ${environment.deletedCount} variables`
-      : "Environment already matches; no configuration write needed");
+    logStep(
+      options.logger,
+      loaded.targetName,
+      "configuration",
+      environment.changed
+        ? `Updated ${environment.updatedCount} and deleted ${environment.deletedCount} variables`
+        : "Environment already matches; no configuration write needed",
+    );
   }
 
   logStep(
@@ -70,10 +81,12 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     `Uploading to ${loaded.target.functionName}`,
   );
   const deploy = await deps.lambda.updateFunctionCode(loaded, build.artifactBytes);
+
   if (environment) {
     logStep(options.logger, loaded.targetName, "deploy", "Waiting for code update completion");
     await deps.lambda.waitForUpdate(loaded);
   }
+
   logStep(
     options.logger,
     loaded.targetName,
@@ -82,6 +95,7 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
   );
 
   const shouldInvoke = options.invoke ?? loaded.target.invoke.afterDeploy;
+
   if (!shouldInvoke) {
     return { build, deploy, ...(environment ? { environment } : {}) };
   }
@@ -90,6 +104,7 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
   logStep(options.logger, loaded.targetName, "invoke", `Payload ${previewPayload(payload, 300)}`);
   const invoke = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
   logStep(options.logger, loaded.targetName, "invoke", formatInvokeSummary(invoke));
+
   return { build, deploy, invoke, ...(environment ? { environment } : {}) };
 }
 
@@ -100,6 +115,7 @@ export async function invokeTarget(options: InvokeOptions): Promise<InvokeResult
   logStep(options.logger, loaded.targetName, "invoke", `Invoking ${loaded.target.functionName}`);
   const result = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
   logStep(options.logger, loaded.targetName, "invoke", formatInvokeSummary(result));
+
   return result;
 }
 
@@ -120,33 +136,41 @@ export async function resolvePayload(
   }
 
   const configuredPayload = loaded.target.invoke.payloadJson;
+
   if (configuredPayload !== undefined) {
     return configuredPayload;
   }
 
   const file = payloadFile ?? loaded.target.invoke.payloadFile;
+
   if (!file) {
     return undefined;
   }
 
   const raw = await readFile(path.resolve(loaded.projectRoot, file), "utf8");
+
   return JSON.parse(raw);
 }
 
 export function formatInvokeSummary(result: InvokeResult): string {
   const parts = [`status ${result.statusCode ?? "unknown"}`];
+
   if (result.functionError) {
     parts.push(`functionError ${result.functionError}`);
   }
+
   if (result.executedVersion) {
     parts.push(`version ${result.executedVersion}`);
   }
+
   if (result.logTail) {
     parts.push("logs available");
   }
+
   if (result.payload !== undefined) {
     parts.push(`payload ${previewPayload(result.payload, 500)}`);
   }
+
   return parts.join(", ");
 }
 

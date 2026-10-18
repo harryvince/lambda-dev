@@ -19,6 +19,7 @@ describe("output", () => {
     const message = formatError(
       new LambdaDevError("validation", "No target", { hint: "Pick one." }),
     );
+
     expect(message).toContain("[validation]");
     expect(message).toContain("Hint: Pick one.");
   });

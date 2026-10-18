@@ -19,21 +19,21 @@ Releases go through `mise run version` (standard-version: bumps `package.json`, 
 
 ## Layout
 
-| File | Responsibility |
-| --- | --- |
-| `src/cli.ts` | commander entrypoint (`dist/cli.js` is the `bin`). Commands: `init`, `validate`, `deploy`, `invoke`, `watch`. Thin; delegates to `core`/`watch`. |
-| `src/core.ts` | Use cases: `deployTarget` (build → env sync → upload → wait → invoke), `invokeTarget`, `validateTarget`, payload resolution. Takes injectable `RuntimeDeps`. |
-| `src/config.ts` | YAML loading (anchors/merge keys on, alias count capped) and the zod schema. `loadTarget` picks the target and defaults `build.outDir` to `.lambda-dev/<target>`. |
-| `src/build.ts` | esbuild bundle to `index.js`, then zip with the sourcemap and copied assets into `function.zip`. |
-| `src/copy.ts` | Resolves and validates `build.copy` entries (files, directories, globs) into a manifest **before** the out dir is cleared. |
-| `src/aws.ts` | `LambdaAdapter` interface and `AwsLambdaAdapter` (AWS SDK v3). Handles env read-merge-write with `RevisionId`, update waiters, upload, invoke. |
-| `src/environment.ts` | Reserved env var names, patch merge logic, 4 KB limit check. |
-| `src/watch.ts` | chokidar watcher, include/exclude glob matching, `SerializedDebouncedRunner` (debounced, one deploy at a time, coalesces changes made mid-deploy). |
-| `src/errors.ts` | `LambdaDevError` with a `category` and optional `hint`. |
-| `src/output.ts` | Logger and `[target] stage: message` formatting. |
-| `src/scaffold.ts` | Writes the starter config for `init`. |
-| `src/index.ts` | Library re-exports. |
-| `examples/lambda-dev.yml` | Example config shipped in the package. |
+| File                      | Responsibility                                                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/cli.ts`              | commander entrypoint (`dist/cli.js` is the `bin`). Commands: `init`, `validate`, `deploy`, `invoke`, `watch`. Thin; delegates to `core`/`watch`.                  |
+| `src/core.ts`             | Use cases: `deployTarget` (build → env sync → upload → wait → invoke), `invokeTarget`, `validateTarget`, payload resolution. Takes injectable `RuntimeDeps`.      |
+| `src/config.ts`           | YAML loading (anchors/merge keys on, alias count capped) and the zod schema. `loadTarget` picks the target and defaults `build.outDir` to `.lambda-dev/<target>`. |
+| `src/build.ts`            | esbuild bundle to `index.js`, then zip with the sourcemap and copied assets into `function.zip`.                                                                  |
+| `src/copy.ts`             | Resolves and validates `build.copy` entries (files, directories, globs) into a manifest **before** the out dir is cleared.                                        |
+| `src/aws.ts`              | `LambdaAdapter` interface and `AwsLambdaAdapter` (AWS SDK v3). Handles env read-merge-write with `RevisionId`, update waiters, upload, invoke.                    |
+| `src/environment.ts`      | Reserved env var names, patch merge logic, 4 KB limit check.                                                                                                      |
+| `src/watch.ts`            | chokidar watcher, include/exclude glob matching, `SerializedDebouncedRunner` (debounced, one deploy at a time, coalesces changes made mid-deploy).                |
+| `src/errors.ts`           | `LambdaDevError` with a `category` and optional `hint`.                                                                                                           |
+| `src/output.ts`           | Logger and `[target] stage: message` formatting.                                                                                                                  |
+| `src/scaffold.ts`         | Writes the starter config for `init`.                                                                                                                             |
+| `src/index.ts`            | Library re-exports.                                                                                                                                               |
+| `examples/lambda-dev.yml` | Example config shipped in the package.                                                                                                                            |
 
 Tests live in `test/<module>.test.ts`, named after the source module they cover.
 

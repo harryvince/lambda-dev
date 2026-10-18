@@ -35,5 +35,6 @@ export function toLambdaDevError(
   }
 
   const detail = cause instanceof Error ? cause.message : String(cause);
+
   return new LambdaDevError(category, `${message}: ${detail}`, { cause });
 }

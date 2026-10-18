@@ -17,13 +17,16 @@ export interface WatchOptions {
 
 export async function watchTarget(options: WatchOptions): Promise<Pick<FSWatcher, "on" | "close">> {
   const loaded = await loadTarget(options.configPath, options.targetName);
+
   const watchPlan = createWatchPlan(
     loaded.projectRoot,
     loaded.target.watch.include,
     loaded.target.watch.exclude,
   );
+
   const watcherFactory =
     options.watchFactory ?? ((paths, watchOptions) => chokidar.watch(paths, watchOptions));
+
   const runner = new SerializedDebouncedRunner(loaded.target.watch.debounceMs, async () => {
     await deployTarget({
       configPath: options.configPath,
@@ -53,6 +56,7 @@ export async function watchTarget(options: WatchOptions): Promise<Pick<FSWatcher
     "watch",
     `Watching ${loaded.target.watch.include.join(", ")}`,
   );
+
   return watcher;
 }
 
@@ -70,6 +74,7 @@ export function createWatchPlan(
   const normalizedRoot = path.resolve(projectRoot);
   const includeMatchers = includes.map((pattern) => createMatcher(pattern));
   const excludeMatchers = excludes.map((pattern) => createMatcher(pattern));
+
   const roots = Array.from(
     new Set(includes.map((pattern) => path.resolve(normalizedRoot, getWatchRoot(pattern))).sort()),
   );
@@ -78,6 +83,7 @@ export function createWatchPlan(
     roots: roots.length > 0 ? roots : [normalizedRoot],
     shouldHandle(filePath: string): boolean {
       const relativePath = toRelativeUnixPath(normalizedRoot, filePath);
+
       return (
         includeMatchers.some((matches) => matches(relativePath)) &&
         !excludeMatchers.some((matches) => matches(relativePath))
@@ -85,6 +91,7 @@ export function createWatchPlan(
     },
     isIgnored(filePath: string): boolean {
       const relativePath = toRelativeUnixPath(normalizedRoot, filePath);
+
       return excludeMatchers.some((matches) => matches(relativePath));
     },
   };
@@ -96,8 +103,12 @@ function getWatchRoot(pattern: string): string {
 
 function createMatcher(pattern: string): (relativePath: string) => boolean {
   const normalizedPattern = toUnixPath(pattern).replace(/^\.\/+/, "");
+
   // A "dir/**" pattern also matches "dir" itself, so excluded directories aren't walked at all.
-  const directoryPattern = normalizedPattern.endsWith("/**") ? normalizedPattern.slice(0, -3) : undefined;
+  const directoryPattern = normalizedPattern.endsWith("/**")
+    ? normalizedPattern.slice(0, -3)
+    : undefined;
+
   return (relativePath: string) =>
     path.posix.matchesGlob(relativePath, normalizedPattern) ||
     (directoryPattern !== undefined && path.posix.matchesGlob(relativePath, directoryPattern));
@@ -106,7 +117,6 @@ function createMatcher(pattern: string): (relativePath: string) => boolean {
 function toRelativeUnixPath(projectRoot: string, filePath: string): string {
   return toUnixPath(path.relative(projectRoot, path.resolve(filePath)));
 }
-
 
 export class SerializedDebouncedRunner {
   private timer: NodeJS.Timeout | undefined;
@@ -138,15 +148,18 @@ export class SerializedDebouncedRunner {
   private async run(): Promise<void> {
     if (this.running) {
       this.rerunRequested = true;
+
       return;
     }
 
     this.running = true;
+
     try {
       do {
         this.rerunRequested = false;
         await this.operation();
       } while (this.rerunRequested);
+
       this.resolveWaiters();
     } catch (error) {
       this.rejectWaiters(error);
@@ -158,6 +171,7 @@ export class SerializedDebouncedRunner {
 
   private resolveWaiters(): void {
     const waiters = this.waiters.splice(0);
+
     for (const waiter of waiters) {
       waiter.resolve();
     }
@@ -165,6 +179,7 @@ export class SerializedDebouncedRunner {
 
   private rejectWaiters(error: unknown): void {
     const waiters = this.waiters.splice(0);
+
     for (const waiter of waiters) {
       waiter.reject(error);
     }

@@ -14,6 +14,7 @@ export function hasGlobSyntax(segment: string): boolean {
 export function splitGlob(pattern: string): { base: string; glob: string | null } {
   const segments = pattern.split("/");
   const firstGlob = segments.findIndex(hasGlobSyntax);
+
   if (firstGlob === -1) {
     return { base: path.posix.dirname(pattern), glob: null };
   }

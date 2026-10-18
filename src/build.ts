@@ -41,12 +41,14 @@ export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> 
     zip.addLocalFile(bundlePath, "", "index.js");
 
     const sourceMapPath = `${bundlePath}.map`;
+
     if (await exists(sourceMapPath)) {
       zip.addLocalFile(sourceMapPath, "", "index.js.map");
     }
 
     for (const asset of assets) {
       const destination = path.join(outDir, asset.destination);
+
       if (asset.directory) {
         await mkdir(destination, { recursive: true });
         zip.addFile(`${asset.destination}/`, Buffer.alloc(0), "", asset.mode & 0o777);
@@ -65,6 +67,7 @@ export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> 
 
     zip.writeZip(artifactPath);
     const artifactBytes = await readFile(artifactPath);
+
     return {
       artifactPath,
       artifactBytes,
@@ -79,6 +82,7 @@ export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> 
 async function exists(filePath: string): Promise<boolean> {
   try {
     await stat(filePath);
+
     return true;
   } catch {
     return false;

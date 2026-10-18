@@ -34,5 +34,6 @@ targets:
 export async function writeStarterConfig(configPath = "lambda-dev.yml"): Promise<string> {
   const outputPath = path.resolve(configPath);
   await writeFile(outputPath, starterConfig, { flag: "wx" });
+
   return outputPath;
 }
