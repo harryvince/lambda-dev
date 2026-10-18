@@ -38,6 +38,15 @@ export interface DeployOptions {
   deps?: Partial<RuntimeDeps>;
 }
 
+export interface BuildOptions {
+  configPath?: string;
+  targetName?: string;
+  /** false skips the build cache for this build, whatever build.cache says. */
+  cache?: boolean;
+  logger: Logger;
+  deps?: Partial<RuntimeDeps>;
+}
+
 export interface InvokeOptions {
   configPath?: string;
   targetName?: string;
@@ -68,6 +77,18 @@ export interface DeploySummary {
   environment?: EnvironmentUpdateResult;
 }
 
+/** Build a target's zip without touching AWS. */
+export async function buildTarget(options: BuildOptions): Promise<BuildResult> {
+  const loaded = await loadTarget(options.configPath, options.targetName);
+  const deps = resolveDeps(options.deps);
+
+  if (options.cache === false) {
+    loaded.target.build.cache = false;
+  }
+
+  return runBuild(loaded, deps, options.logger);
+}
+
 export async function deployTarget(options: DeployOptions): Promise<DeploySummary> {
   const loaded = await loadTarget(options.configPath, options.targetName);
   const deps = resolveDeps(options.deps);
@@ -80,14 +101,7 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     assertOutDirKeepsSnapshots(loaded);
   }
 
-  logStep(options.logger, loaded.targetName, "build", `Building ${loaded.target.build.entry}`);
-  const build = await deps.buildArtifact(loaded);
-  logStep(
-    options.logger,
-    loaded.targetName,
-    "build",
-    `${build.cached ? "Reused cached build for" : "Created"} ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`,
-  );
+  const build = await runBuild(loaded, deps, options.logger);
 
   if (loaded.target.snapshot) {
     await ensureSnapshot(loaded, deps, options.logger);
@@ -267,6 +281,23 @@ export function formatInvokeSummary(result: InvokeResult): string {
   }
 
   return parts.join(", ");
+}
+
+async function runBuild(
+  loaded: LoadedTarget,
+  deps: RuntimeDeps,
+  logger: Logger,
+): Promise<BuildResult> {
+  logStep(logger, loaded.targetName, "build", `Building ${loaded.target.build.entry}`);
+  const build = await deps.buildArtifact(loaded);
+  logStep(
+    logger,
+    loaded.targetName,
+    "build",
+    `${build.cached ? "Reused cached build for" : "Created"} ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`,
+  );
+
+  return build;
 }
 
 async function ensureSnapshot(

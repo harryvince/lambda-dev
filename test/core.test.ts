@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildTarget,
   deployTarget,
   formatInvokeSummary,
   invokeTarget,
@@ -509,5 +510,26 @@ describe("rollback snapshots", () => {
     ).rejects.toMatchObject({ category: "validation" });
     expect(lambda.restoreEnvironment).not.toHaveBeenCalled();
     expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
+  });
+});
+
+describe("build command", () => {
+  it("builds without calling AWS and honours --no-cache", async () => {
+    const configPath = await writeProjectConfig(true);
+    const lambda = fakeLambda();
+    const buildArtifact = vi.fn().mockResolvedValue(built());
+
+    const result = await buildTarget({
+      configPath,
+      cache: false,
+      logger: memoryLogger(),
+      deps: { buildArtifact, lambda },
+    });
+
+    expect(result.artifactPath).toBe("/tmp/function.zip");
+    expect(buildArtifact.mock.calls[0]?.[0].target.build.cache).toBe(false);
+    expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
+    expect(lambda.downloadFunction).not.toHaveBeenCalled();
+    expect(lambda.invokeFunction).not.toHaveBeenCalled();
   });
 });

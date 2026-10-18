@@ -201,6 +201,7 @@ Add `lambda-dev.yml` to `watch.include` alongside your source globs if editing Y
 ```bash
 aws-lambda-dev init [--config lambda-dev.yml]
 aws-lambda-dev validate [target] [--config lambda-dev.yml]
+aws-lambda-dev build [target] [--config lambda-dev.yml] [--no-cache]
 aws-lambda-dev deploy [target] [--config lambda-dev.yml] [--invoke] [--no-cache]
 aws-lambda-dev invoke [target] [--config lambda-dev.yml] [--payload-file event.json]
 aws-lambda-dev watch [target] [--config lambda-dev.yml]
@@ -209,7 +210,7 @@ aws-lambda-dev rollback [target] [--config lambda-dev.yml]
 
 Before the first deploy to a function, the CLI saves its current code and environment to `.lambda-dev/snapshots/`. `rollback` restores them, then deletes the snapshot. A failed snapshot stops the deploy before anything changes; set `snapshot: false` on a target to skip it. The snapshot holds environment values in plain text, so keep `.lambda-dev/` out of version control.
 
-Builds are cached in `.lambda-dev/build-cache/`. When a target's build options, copy list, and every bundled and copied file match an earlier build (by any target), `deploy` reuses that zip instead of rebuilding, so deploying the same code to dev, staging, and prod uploads byte-identical artifacts. Set `build.cache: false` or pass `--no-cache` to always rebuild.
+Builds are cached in `.lambda-dev/build-cache/`. When a target's build options, copy list, and every bundled and copied file match an earlier build (by any target), `deploy` reuses that zip instead of rebuilding, so deploying the same code to dev, staging, and prod uploads byte-identical artifacts. Set `build.cache: false` or pass `--no-cache` to always rebuild. `build` builds a target without deploying it.
 
 ## Minimum IAM Permissions
 

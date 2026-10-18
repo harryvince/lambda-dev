@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { z } from "zod";
-import { deployTarget, invokeTarget, rollbackTarget, validateTarget } from "./core.js";
+import { buildTarget, deployTarget, invokeTarget, rollbackTarget, validateTarget } from "./core.js";
 import { formatError, consoleLogger } from "./output.js";
 import { writeStarterConfig } from "./scaffold.js";
 import { watchTarget } from "./watch.js";
@@ -36,6 +36,21 @@ export function createProgram(): Command {
     .action(async (target, options) => {
       const loaded = await validateTarget(options.config, target);
       consoleLogger.info(`[${loaded.targetName}] validation: ok`);
+    });
+
+  program
+    .command("build")
+    .description("Build a target's zip without deploying it.")
+    .argument("[target]", "Target name")
+    .option("-c, --config <path>", "Config file path", "lambda-dev.yml")
+    .option("--no-cache", "Rebuild even if a cached build matches")
+    .action(async (target, options) => {
+      await buildTarget({
+        configPath: options.config,
+        targetName: target,
+        cache: options.cache,
+        logger: consoleLogger,
+      });
     });
 
   program

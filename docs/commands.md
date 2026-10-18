@@ -24,6 +24,18 @@ aws-lambda-dev validate [target] [-c lambda-dev.yml]
 
 Parses the config and resolves the target. Doesn't build or call AWS, so it's safe to run in CI.
 
+## `build`
+
+```bash
+aws-lambda-dev build [target] [-c lambda-dev.yml] [--no-cache]
+```
+
+Builds the target's zip into `build.outDir` without deploying it. Doesn't call AWS. Use it to check that a build works, to inspect the output, or to fill the [build cache](configuration.md#build-cache) before deploying the same code to several targets.
+
+| Option | Description |
+| --- | --- |
+| `--no-cache` | Build from scratch even if the build cache has a match. |
+
 ## `deploy`
 
 ```bash
