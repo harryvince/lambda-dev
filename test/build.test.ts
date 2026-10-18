@@ -22,6 +22,7 @@ describe("buildArtifact", () => {
       target: {
         functionName: "dev-function",
         region: "eu-west-2",
+        snapshot: true,
         build: {
           entry: "handler.ts",
           bundle: true,

@@ -11,6 +11,15 @@ import { loadTarget, type LoadedTarget } from "./config.js";
 import { logStep, previewPayload, type Logger } from "./output.js";
 import { hasEnvironmentPatch, type EnvironmentUpdateResult } from "./environment.js";
 import { parseJson, type JsonValue } from "./json.js";
+import {
+  assertOutDirKeepsSnapshots,
+  deleteSnapshot,
+  hasSnapshot,
+  readSnapshot,
+  snapshotDirectory,
+  writeSnapshot,
+} from "./snapshot.js";
+import { LambdaDevError } from "./errors.js";
 
 export interface RuntimeDeps {
   buildArtifact: (loaded: LoadedTarget) => Promise<BuildResult>;
@@ -36,6 +45,20 @@ export interface InvokeOptions {
   deps?: Partial<RuntimeDeps>;
 }
 
+export interface RollbackOptions {
+  configPath?: string;
+  targetName?: string;
+  logger: Logger;
+  deps?: Partial<RuntimeDeps>;
+}
+
+export interface RollbackSummary {
+  /** When the restored snapshot was taken, as an ISO timestamp. */
+  snapshotCreatedAt: string;
+  environment: EnvironmentUpdateResult;
+  deploy: DeployResult;
+}
+
 export interface DeploySummary {
   build: BuildResult;
   deploy: DeployResult;
@@ -46,6 +69,11 @@ export interface DeploySummary {
 export async function deployTarget(options: DeployOptions): Promise<DeploySummary> {
   const loaded = await loadTarget(options.configPath, options.targetName);
   const deps = resolveDeps(options.deps);
+
+  if (loaded.target.snapshot) {
+    assertOutDirKeepsSnapshots(loaded);
+  }
+
   logStep(options.logger, loaded.targetName, "build", `Building ${loaded.target.build.entry}`);
   const build = await deps.buildArtifact(loaded);
   logStep(
@@ -54,6 +82,10 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     "build",
     `Created ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`,
   );
+
+  if (loaded.target.snapshot) {
+    await ensureSnapshot(loaded, deps, options.logger);
+  }
 
   let environment: EnvironmentUpdateResult | undefined;
 
@@ -115,6 +147,54 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
   summary.invoke = invoke;
 
   return summary;
+}
+
+/** Put the function back to its snapshot from before the first deploy, then delete the snapshot. */
+export async function rollbackTarget(options: RollbackOptions): Promise<RollbackSummary> {
+  const loaded = await loadTarget(options.configPath, options.targetName);
+  const deps = resolveDeps(options.deps);
+  const snapshot = await readSnapshot(loaded);
+
+  if (!snapshot) {
+    throw new LambdaDevError(
+      "validation",
+      `No rollback snapshot for ${loaded.target.functionName} in ${loaded.target.region}`,
+      {
+        hint: `A snapshot is saved before the first deploy to a function and deleted after a rollback. Expected one in ${snapshotDirectory(loaded)}.`,
+      },
+    );
+  }
+
+  logStep(
+    options.logger,
+    loaded.targetName,
+    "rollback",
+    `Restoring ${loaded.target.functionName} to its snapshot from ${snapshot.createdAt}`,
+  );
+
+  const environment = await deps.lambda.restoreEnvironment(loaded, snapshot.environment);
+  logStep(
+    options.logger,
+    loaded.targetName,
+    "rollback",
+    environment.changed
+      ? `Restored the environment (${environment.updatedCount} set, ${environment.deletedCount} deleted)`
+      : "Environment already matches the snapshot",
+  );
+
+  logStep(options.logger, loaded.targetName, "rollback", "Uploading the original code");
+  const deploy = await deps.lambda.updateFunctionCode(loaded, snapshot.code);
+  await deps.lambda.waitForUpdate(loaded);
+
+  await deleteSnapshot(loaded);
+  logStep(
+    options.logger,
+    loaded.targetName,
+    "rollback",
+    "Restored. The snapshot was deleted; the next deploy will take a new one.",
+  );
+
+  return { snapshotCreatedAt: snapshot.createdAt, environment, deploy };
 }
 
 export async function invokeTarget(options: InvokeOptions): Promise<InvokeResult> {
@@ -181,6 +261,31 @@ export function formatInvokeSummary(result: InvokeResult): string {
   }
 
   return parts.join(", ");
+}
+
+async function ensureSnapshot(
+  loaded: LoadedTarget,
+  deps: RuntimeDeps,
+  logger: Logger,
+): Promise<void> {
+  if (await hasSnapshot(loaded)) {
+    return;
+  }
+
+  logStep(
+    logger,
+    loaded.targetName,
+    "snapshot",
+    `Saving the current code and environment of ${loaded.target.functionName} for rollback`,
+  );
+  const state = await deps.lambda.downloadFunction(loaded);
+  const directory = await writeSnapshot(loaded, state);
+  logStep(
+    logger,
+    loaded.targetName,
+    "snapshot",
+    `Saved to ${path.relative(loaded.projectRoot, directory)}`,
+  );
 }
 
 function resolveDeps(overrides: Partial<RuntimeDeps> = {}): RuntimeDeps {

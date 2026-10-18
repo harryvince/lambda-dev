@@ -1,7 +1,9 @@
 import { TextEncoder } from "node:util";
 import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import {
+  type FunctionConfiguration,
   type LambdaClient,
+  GetFunctionCommand,
   GetFunctionConfigurationCommand,
   UpdateFunctionConfigurationCommand,
   InvokeCommand,
@@ -10,6 +12,7 @@ import {
 import { AwsLambdaAdapter, createLambdaClient } from "../src/aws.js";
 import { formatError } from "../src/output.js";
 import type { LoadedTarget } from "../src/config.js";
+import { sha256Base64 } from "../src/snapshot.js";
 
 describe("aws adapter", () => {
   it("updates Lambda function code with zip bytes", async () => {
@@ -106,6 +109,7 @@ function loadedTarget(): LoadedTarget {
     target: {
       functionName: "dev-function",
       region: "eu-west-2",
+      snapshot: true,
       build: {
         entry: "handler.ts",
         bundle: true,
@@ -405,5 +409,93 @@ describe("Lambda environment synchronization", () => {
       message: expect.not.stringContaining(PRIVATE_VALUE),
       hint: expect.not.stringContaining(PRIVATE_VALUE),
     });
+  });
+});
+
+describe("rollback snapshot reads and restores", () => {
+  const code = new Uint8Array([4, 5, 6]);
+
+  const getFunction = (configuration: FunctionConfiguration = {}) => ({
+    Configuration: {
+      PackageType: "Zip",
+      CodeSha256: sha256Base64(code),
+      Environment: { Variables: { KEEP: PRIVATE_VALUE } },
+      ...configuration,
+    },
+    Code: { Location: "https://example.invalid/code.zip" },
+    $metadata: {},
+  });
+
+  it("downloads the code and environment and checks the code against its checksum", async () => {
+    const send = vi.fn().mockResolvedValue(getFunction());
+    const download = vi.fn().mockResolvedValue(code);
+    const adapter = new AwsLambdaAdapter(fakeClient(send), vi.fn(), download);
+
+    expect(await adapter.downloadFunction(loadedTarget())).toEqual({
+      code,
+      codeSha256: sha256Base64(code),
+      environment: { KEEP: PRIVATE_VALUE },
+    });
+    expect(send.mock.calls[0][0]).toBeInstanceOf(GetFunctionCommand);
+    expect(download).toHaveBeenCalledWith("https://example.invalid/code.zip");
+
+    download.mockResolvedValue(new Uint8Array([0]));
+    await expect(adapter.downloadFunction(loadedTarget())).rejects.toMatchObject({
+      category: "aws_snapshot",
+      message: expect.stringContaining("checksum"),
+    });
+  });
+
+  it.each([
+    [getFunction({ PackageType: "Image" }), "container image"],
+    [getFunction({ Environment: { Error: { Message: PRIVATE_VALUE } } }), "environment"],
+  ])("refuses functions it can't snapshot %#", async (response, message) => {
+    const adapter = new AwsLambdaAdapter(
+      fakeClient(vi.fn().mockResolvedValue(response)),
+      vi.fn(),
+      vi.fn().mockResolvedValue(code),
+    );
+
+    try {
+      await adapter.downloadFunction(loadedTarget());
+      throw new Error("Expected rejection");
+    } catch (error) {
+      expect(error).toMatchObject({ category: "aws_snapshot" });
+      expect(formatError(error)).toContain(message);
+      expect(formatError(error)).not.toContain(PRIVATE_VALUE);
+    }
+  });
+
+  it("points at lambda:GetFunction and snapshot: false when access is denied", async () => {
+    const denied = Object.assign(new Error(PRIVATE_VALUE), { name: "AccessDeniedException" });
+    const adapter = new AwsLambdaAdapter(fakeClient(vi.fn().mockRejectedValue(denied)));
+
+    await expect(adapter.downloadFunction(loadedTarget())).rejects.toMatchObject({
+      category: "aws_snapshot",
+      message: expect.not.stringContaining(PRIVATE_VALUE),
+      hint: expect.stringMatching(/lambda:GetFunction.*snapshot: false/),
+    });
+  });
+
+  it("restores the exact environment, deleting variables added since", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce(ready({ KEEP: "changed", ADDED: "x" }))
+      .mockResolvedValueOnce({ $metadata: {} })
+      .mockResolvedValueOnce(ready({ KEEP: PRIVATE_VALUE }));
+
+    const wait = vi.fn().mockResolvedValue({ state: "SUCCESS" });
+
+    const result = await new AwsLambdaAdapter(fakeClient(send), wait).restoreEnvironment(
+      loadedTarget(),
+      { KEEP: PRIVATE_VALUE },
+    );
+
+    expect(send.mock.calls[1][0].input).toEqual({
+      FunctionName: "dev-function",
+      RevisionId: "rev-1",
+      Environment: { Variables: { KEEP: PRIVATE_VALUE } },
+    });
+    expect(result).toEqual({ changed: true, updatedCount: 1, deletedCount: 1 });
   });
 });

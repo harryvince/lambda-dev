@@ -3,6 +3,7 @@ export type ErrorCategory =
   | "build"
   | "aws_deploy"
   | "aws_configuration"
+  | "aws_snapshot"
   | "aws_invoke"
   | "filesystem"
   | "unexpected";

@@ -100,4 +100,4 @@ Every save that matches `watch.include` runs a full build-upload-invoke cycle. S
 A failed cycle (for example a type error that breaks the build) is logged and watch keeps running; fix the file and save again.
 
 !!! tip
-    Add `.lambda-dev/` to your `.gitignore`. It holds the build output for each target.
+    Add `.lambda-dev/` to your `.gitignore`. It holds the build output for each target and the [rollback snapshots](rollback.md), which include your function's environment variables.

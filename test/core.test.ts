@@ -1,10 +1,17 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { deployTarget, formatInvokeSummary, invokeTarget, validateTarget } from "../src/core.js";
+import {
+  deployTarget,
+  formatInvokeSummary,
+  invokeTarget,
+  rollbackTarget,
+  validateTarget,
+} from "../src/core.js";
 import { LambdaDevError } from "../src/errors.js";
 import type { EnvironmentUpdateResult, LambdaAdapter } from "../src/aws.js";
+import { readSnapshot, sha256Base64, snapshotDirectory } from "../src/snapshot.js";
 
 describe("core use cases", () => {
   it("deploys once and invokes after upload when configured", async () => {
@@ -97,11 +104,21 @@ describe("core use cases", () => {
   });
 });
 
+const ORIGINAL_CODE = new Uint8Array([9, 9, 9]);
+
 function fakeLambda(): LambdaAdapter {
   return {
     updateEnvironment: vi
       .fn()
       .mockResolvedValue({ changed: false, updatedCount: 0, deletedCount: 0 }),
+    restoreEnvironment: vi
+      .fn()
+      .mockResolvedValue({ changed: true, updatedCount: 1, deletedCount: 1 }),
+    downloadFunction: vi.fn().mockResolvedValue({
+      code: ORIGINAL_CODE,
+      codeSha256: sha256Base64(ORIGINAL_CODE),
+      environment: { ORIGINAL: "FAKE_SNAPSHOT_VALUE" },
+    }),
     waitForUpdate: vi.fn().mockResolvedValue(undefined),
     updateFunctionCode: vi.fn().mockResolvedValue({ functionName: "dev-function", version: "1" }),
     invokeFunction: vi.fn().mockResolvedValue({ statusCode: 200, payload: { ok: true } }),
@@ -321,5 +338,146 @@ describe("environment deployment orchestration", () => {
         result,
       ]),
     ).not.toContain("FAKE_PRIVATE_VALUE");
+  });
+});
+
+describe("rollback snapshots", () => {
+  it("saves the function before the first deploy changes anything, and only once", async () => {
+    const configPath = await environmentConfig();
+    const events: string[] = [];
+    const lambda = fakeLambda();
+
+    vi.mocked(lambda.downloadFunction).mockImplementation(async () => {
+      events.push("snapshot");
+
+      return {
+        code: ORIGINAL_CODE,
+        codeSha256: sha256Base64(ORIGINAL_CODE),
+        environment: { ORIGINAL: "FAKE_SNAPSHOT_VALUE" },
+      };
+    });
+    vi.mocked(lambda.updateEnvironment).mockImplementation(async () => {
+      events.push("environment");
+
+      return { changed: true, updatedCount: 1, deletedCount: 0 };
+    });
+
+    const logger = memoryLogger();
+    const deps = { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) };
+    await deployTarget({ configPath, invoke: false, logger, deps });
+    await deployTarget({ configPath, invoke: false, logger, deps });
+
+    expect(events).toEqual(["snapshot", "environment", "environment"]);
+
+    const loaded = await validateTarget(configPath);
+    const snapshot = await readSnapshot(loaded);
+    expect(snapshot?.code).toEqual(Buffer.from(ORIGINAL_CODE));
+    expect(snapshot?.environment).toEqual({ ORIGINAL: "FAKE_SNAPSHOT_VALUE" });
+    expect((await stat(path.join(snapshotDirectory(loaded), "snapshot.json"))).mode & 0o777).toBe(
+      0o600,
+    );
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("FAKE_SNAPSHOT_VALUE");
+  });
+
+  it("stops the deploy before any AWS change when the snapshot fails", async () => {
+    const lambda = fakeLambda();
+    vi.mocked(lambda.downloadFunction).mockRejectedValue(
+      new LambdaDevError("aws_snapshot", "Failed"),
+    );
+
+    await expect(
+      deployTarget({
+        configPath: await environmentConfig(),
+        logger: memoryLogger(),
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({ category: "aws_snapshot" });
+    expect(lambda.updateEnvironment).not.toHaveBeenCalled();
+    expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
+  });
+
+  it("skips the snapshot when the target sets snapshot: false", async () => {
+    const configPath = await writeProjectConfig(false);
+    await writeFile(
+      configPath,
+      (await readFile(configPath, "utf8")).replace("    build:", "    snapshot: false\n    build:"),
+    );
+
+    const lambda = fakeLambda();
+    await deployTarget({
+      configPath,
+      logger: memoryLogger(),
+      deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+    });
+
+    expect(lambda.downloadFunction).not.toHaveBeenCalled();
+    expect(lambda.updateFunctionCode).toHaveBeenCalledOnce();
+  });
+
+  it("refuses an outDir that would delete the snapshots, before building", async () => {
+    const configPath = await writeProjectConfig(false);
+    await writeFile(
+      configPath,
+      (await readFile(configPath, "utf8")).replace(
+        "      entry: src/handler.ts",
+        "      entry: src/handler.ts\n      outDir: .lambda-dev",
+      ),
+    );
+
+    const buildArtifact = vi.fn();
+    await expect(
+      deployTarget({
+        configPath,
+        logger: memoryLogger(),
+        deps: { lambda: fakeLambda(), buildArtifact },
+      }),
+    ).rejects.toMatchObject({ category: "validation" });
+    expect(buildArtifact).not.toHaveBeenCalled();
+  });
+
+  it("restores the environment and code, waits, then deletes the snapshot", async () => {
+    const configPath = await writeProjectConfig(false);
+    const lambda = fakeLambda();
+    const deps = { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) };
+    await deployTarget({ configPath, logger: memoryLogger(), deps });
+    vi.mocked(lambda.updateFunctionCode).mockClear();
+
+    const result = await rollbackTarget({ configPath, logger: memoryLogger(), deps });
+
+    expect(lambda.restoreEnvironment).toHaveBeenCalledWith(expect.anything(), {
+      ORIGINAL: "FAKE_SNAPSHOT_VALUE",
+    });
+    expect(lambda.updateFunctionCode).toHaveBeenCalledWith(
+      expect.anything(),
+      Buffer.from(ORIGINAL_CODE),
+    );
+    expect(lambda.waitForUpdate).toHaveBeenCalledOnce();
+    expect(result.environment.changed).toBe(true);
+    expect(await readSnapshot(await validateTarget(configPath))).toBeUndefined();
+  });
+
+  it("keeps the snapshot when the rollback fails", async () => {
+    const configPath = await writeProjectConfig(false);
+    const lambda = fakeLambda();
+    const deps = { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) };
+    await deployTarget({ configPath, logger: memoryLogger(), deps });
+    vi.mocked(lambda.updateFunctionCode).mockRejectedValue(new LambdaDevError("aws_deploy", "x"));
+
+    await expect(rollbackTarget({ configPath, logger: memoryLogger(), deps })).rejects.toThrow();
+    expect(await readSnapshot(await validateTarget(configPath))).toBeDefined();
+  });
+
+  it("fails without AWS calls when there is no snapshot", async () => {
+    const lambda = fakeLambda();
+
+    await expect(
+      rollbackTarget({
+        configPath: await writeProjectConfig(false),
+        logger: memoryLogger(),
+        deps: { lambda },
+      }),
+    ).rejects.toMatchObject({ category: "validation" });
+    expect(lambda.restoreEnvironment).not.toHaveBeenCalled();
+    expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
   });
 });

@@ -73,8 +73,8 @@ Environment changes and code uploads are separate AWS operations. With a non-emp
 
 Each wait gives up after 120 seconds.
 
-!!! warning "No rollback"
-    If step 6 fails, the environment change from step 4 has already been applied. A timeout can also mean the change is still being applied. Check the function in the console, fix the cause, and rerun. To undo a change, set the old values (or `null`) explicitly and deploy again.
+!!! warning "Not atomic"
+    If step 6 fails, the environment change from step 4 has already been applied. A timeout can also mean the change is still being applied. Check the function in the console, fix the cause, and rerun. To undo a single change, set the old value (or `null`) and deploy again. To put back the whole environment and code as they were before your first deploy, use [`rollback`](rollback.md).
 
 Changes apply to the function's unpublished configuration (`$LATEST`), not to published versions.
 

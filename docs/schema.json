@@ -79,6 +79,11 @@
               ]
             }
           },
+          "snapshot": {
+            "default": true,
+            "description": "Save the function's code and environment before the first deploy, so rollback can restore them.",
+            "type": "boolean"
+          },
           "build": {
             "type": "object",
             "properties": {

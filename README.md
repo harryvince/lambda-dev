@@ -190,7 +190,7 @@ Values must be strings or `null`; quote booleans and numbers such as `"true"` an
 
 The CLI builds locally before changing AWS. For a nonempty environment patch, it waits for any in-progress update, reads and merges the current variables, writes only if needed using the configuration revision, waits for that update, uploads code, and waits for code completion before optional invocation. Each update wait has a 120-second limit. It checks for an active function and successful update state before proceeding. Configuration read failures fail closed. A concurrent configuration change fails the revision guard; rerun to obtain a fresh revision instead of overwriting the newer change.
 
-**Configuration and code updates are separate AWS operations.** If the code upload fails, your environment may already be updated. A timeout also means the remote operation might still complete. Inspect Lambda's state and configuration, correct any permissions or values, then retry once stable. To restore previous settings, explicitly supply the desired values or deletions; there is no automatic rollback. Environment updates affect the unpublished function configuration, not published immutable versions.
+**Configuration and code updates are separate AWS operations.** If the code upload fails, your environment may already be updated. A timeout also means the remote operation might still complete. Inspect Lambda's state and configuration, correct any permissions or values, then retry once stable. To restore previous settings, explicitly supply the desired values or deletions, or run `rollback` to restore the environment and code saved before the first deploy. Environment updates affect the unpublished function configuration, not published immutable versions.
 
 Environment values are omitted from synchronization logs, summaries, and configuration failure diagnostics. Keep secrets out of committed YAML; use your existing secrets-management approach for sensitive data. Invoked application responses and requested Lambda logs retain their existing behavior, so your function should also avoid printing secrets.
 
@@ -204,7 +204,10 @@ aws-lambda-dev validate [target] [--config lambda-dev.yml]
 aws-lambda-dev deploy [target] [--config lambda-dev.yml] [--invoke]
 aws-lambda-dev invoke [target] [--config lambda-dev.yml] [--payload-file event.json]
 aws-lambda-dev watch [target] [--config lambda-dev.yml]
+aws-lambda-dev rollback [target] [--config lambda-dev.yml]
 ```
+
+Before the first deploy to a function, the CLI saves its current code and environment to `.lambda-dev/snapshots/`. `rollback` restores them, then deletes the snapshot. A failed snapshot stops the deploy before anything changes; set `snapshot: false` on a target to skip it. The snapshot holds environment values in plain text, so keep `.lambda-dev/` out of version control.
 
 ## Minimum IAM Permissions
 
@@ -219,6 +222,7 @@ Use the smallest resource ARN that matches your development Lambda.
       "Action": [
         "lambda:UpdateFunctionCode",
         "lambda:InvokeFunction",
+        "lambda:GetFunction",
         "lambda:GetFunctionConfiguration",
         "lambda:UpdateFunctionConfiguration"
       ],
@@ -228,13 +232,14 @@ Use the smallest resource ARN that matches your development Lambda.
 }
 ```
 
-`lambda:GetFunctionConfiguration` and `lambda:UpdateFunctionConfiguration` are needed for nonempty environment patches and their completion waits. Code-only targets keep the existing permissions. KMS-encrypted environments may also require access to the existing encryption key; the CLI does not modify that key.
+`lambda:GetFunctionConfiguration` and `lambda:UpdateFunctionConfiguration` are needed for nonempty environment patches and their completion waits. `lambda:GetFunction` is needed for the rollback snapshot unless `snapshot: false`, and `rollback` also needs the two configuration permissions. KMS-encrypted environments may also require access to the existing encryption key; the CLI does not modify that key.
 
 ## Troubleshooting
 
 - `validation`: fix `lambda-dev.yml` before retrying; AWS is not called when config validation fails.
 - `build`: esbuild failed, so upload and invoke are skipped for that cycle.
 - `aws_deploy`: credentials, region, IAM, or function name prevented upload. Environment synchronization may already have completed.
+- `aws_snapshot`: saving the rollback snapshot failed before any AWS change. Grant `lambda:GetFunction`, or set `snapshot: false`.
 - `aws_configuration`: environment read/update or completion checks failed. Inspect the function status, revision, and IAM/KMS access before retrying; code upload/invocation stops at the failed stage.
 - `aws_invoke`: deploy may have succeeded, but the test invocation failed.
 

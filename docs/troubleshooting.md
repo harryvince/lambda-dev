@@ -7,6 +7,7 @@ Errors are printed as `[category] message`, usually with a `Hint:` line. The cat
 | `validation` | Reading the config or choosing a target | No |
 | `filesystem` | Reading the config file | No |
 | `build` | esbuild, or copying files | No |
+| `aws_snapshot` | Saving the rollback snapshot before the first deploy | No |
 | `aws_configuration` | Syncing environment variables, or waiting for an update | Possibly |
 | `aws_deploy` | Uploading code | Environment may have been updated |
 | `aws_invoke` | Invoking | Code was uploaded |
@@ -33,6 +34,17 @@ The config file couldn't be read. Check the path, or pass `--config`.
 ## `build`
 
 esbuild failed, or a `build.copy` entry is invalid. The upload and invoke are skipped. In `watch` mode, fix the error and save again.
+
+## `aws_snapshot`
+
+The CLI couldn't save the function's current code and environment before its first deploy, so it stopped without changing anything. Common causes:
+
+- Missing `lambda:GetFunction` permission.
+- No access to the KMS key the function's environment is encrypted with.
+- The function is a container image, which this tool doesn't deploy.
+- The function's current code is over 50 MB zipped, more than `rollback` could upload.
+
+Fix the cause and deploy again, or set `snapshot: false` on the target to deploy without a snapshot. See [Rollback](rollback.md).
 
 ## `aws_configuration`
 

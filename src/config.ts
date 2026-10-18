@@ -137,6 +137,10 @@ const targetSchema = z
       description:
         "Environment variables to set (string) or delete (null). Unlisted variables are left unchanged.",
     }),
+    snapshot: z.boolean().default(true).meta({
+      description:
+        "Save the function's code and environment before the first deploy, so rollback can restore them.",
+    }),
     build: buildSchema,
     watch: watchSchema,
     invoke: invokeSchema,

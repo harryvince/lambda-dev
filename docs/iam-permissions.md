@@ -11,6 +11,7 @@ The credentials you run the CLI with need these actions on the target function. 
       "Action": [
         "lambda:UpdateFunctionCode",
         "lambda:InvokeFunction",
+        "lambda:GetFunction",
         "lambda:GetFunctionConfiguration",
         "lambda:UpdateFunctionConfiguration"
       ],
@@ -24,10 +25,11 @@ The credentials you run the CLI with need these actions on the target function. 
 | --- | --- |
 | `lambda:UpdateFunctionCode` | Every `deploy` and `watch` cycle. |
 | `lambda:InvokeFunction` | `invoke`, `deploy --invoke`, and `invoke.afterDeploy`. |
-| `lambda:GetFunctionConfiguration` | Targets with a non-empty `environment`. |
-| `lambda:UpdateFunctionConfiguration` | Targets with a non-empty `environment`. |
+| `lambda:GetFunction` | The [rollback snapshot](rollback.md) before the first deploy to a function. Not needed with `snapshot: false`. |
+| `lambda:GetFunctionConfiguration` | Targets with a non-empty `environment`, and `rollback`. |
+| `lambda:UpdateFunctionConfiguration` | Targets with a non-empty `environment`, and `rollback`. |
 
-Targets without `environment` only need the first two.
+Targets without `environment` and with `snapshot: false` only need the first two. `GetFunction` also returns a temporary link to download the code; no S3 permissions are needed for it.
 
 If the function's environment is encrypted with a customer-managed KMS key, you may also need access to that key. The CLI never changes the key.
 

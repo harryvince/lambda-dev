@@ -43,6 +43,15 @@ export interface EnvironmentPatchResult {
   result: EnvironmentUpdateResult;
 }
 
+/** The patch that turns `existing` into exactly `desired`: set every desired variable, delete the rest. */
+export function patchToMatch(existing: Record<string, string>, desired: Record<string, string>) {
+  const deletions = Object.keys(existing).flatMap((key) =>
+    Object.hasOwn(desired, key) ? [] : [[key, null] as const],
+  );
+
+  return { ...Object.fromEntries(deletions), ...desired };
+}
+
 export function applyEnvironmentPatch(
   existing: Record<string, string>,
   patch: Record<string, string | null>,

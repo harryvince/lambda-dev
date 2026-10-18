@@ -23,9 +23,10 @@ Each deploy cycle runs the same steps, in order:
 
 1. **Load and validate** `lambda-dev.yml`. Invalid config stops here, before anything touches AWS.
 2. **Build** the handler with esbuild into `index.js`, then zip it with its sourcemap and any [extra files](copying-files.md) you list.
-3. **Sync environment variables**, if the target defines any. Only the variables you list are changed; everything else on the function is left alone. See [Environment variables](environment-variables.md).
-4. **Upload** the zip with `UpdateFunctionCode`.
-5. **Invoke** the function with a test payload, if requested.
+3. **Snapshot** the function's current code and environment, the first time you deploy to it, so [`rollback`](rollback.md) can restore it later.
+4. **Sync environment variables**, if the target defines any. Only the variables you list are changed; everything else on the function is left alone. See [Environment variables](environment-variables.md).
+5. **Upload** the zip with `UpdateFunctionCode`.
+6. **Invoke** the function with a test payload, if requested.
 
 `watch` repeats that cycle on file changes, debouncing rapid saves and never running two deploys for the same target at once.
 
@@ -43,3 +44,4 @@ Each deploy cycle runs the same steps, in order:
 - [Getting started](getting-started.md): install, create a config, and deploy for the first time.
 - [Configuration](configuration.md): every option in `lambda-dev.yml`.
 - [Commands](commands.md): CLI reference.
+- [Rollback](rollback.md): put a function back as it was before your first deploy.

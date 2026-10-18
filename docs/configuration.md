@@ -88,6 +88,7 @@ A target is one Lambda function. Use several targets for several functions, or f
 | `region` | Yes | AWS region, e.g. `eu-west-2`. |
 | `profile` | No | Named profile from your AWS config. Without it, the default AWS SDK credential chain is used. |
 | `environment` | No | Environment variables to set or delete. See [Environment variables](environment-variables.md). |
+| `snapshot` | No | Default `true`. Save the function's code and environment before the first deploy, so [`rollback`](rollback.md) can restore them. |
 | `build` | Yes | See [`build`](#build). |
 | `watch` | No | See [`watch`](#watch). |
 | `invoke` | No | See [`invoke`](#invoke). |
@@ -111,7 +112,7 @@ Options passed to esbuild. The output is always a single `index.js` (plus `index
 | `external` | `[]` | Packages to leave out of the bundle, e.g. `"@aws-sdk/*"`. |
 | `define` | `{}` | esbuild `define` replacements. Values are code, so strings need inner quotes: `'"dev"'`. |
 | `copy` | `[]` | Extra files to put in the zip. See [Copying files](copying-files.md). |
-| `outDir` | `.lambda-dev/<target>` | Build output directory. It's deleted and recreated on every build. |
+| `outDir` | `.lambda-dev/<target>` | Build output directory. It's deleted and recreated on every build, so it can't contain `.lambda-dev/snapshots`. |
 
 !!! warning "`format: esm`"
     The zip doesn't include a `package.json`, so whether Lambda treats `index.js` as an ES module depends on the Node.js runtime. `cjs` is the safe default. If you need `esm`, [copy](copying-files.md) in a `package.json` with `"type": "module"`.

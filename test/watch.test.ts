@@ -5,6 +5,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import { createWatchPlan, SerializedDebouncedRunner, watchTarget } from "../src/watch.js";
 import type { LambdaAdapter } from "../src/aws.js";
+import { sha256Base64 } from "../src/snapshot.js";
 
 describe("SerializedDebouncedRunner", () => {
   it("coalesces rapid changes into one run", async () => {
@@ -135,6 +136,12 @@ targets:
         .fn()
         .mockResolvedValue({ changed: false, updatedCount: 0, deletedCount: 0 }),
       waitForUpdate: vi.fn().mockResolvedValue(undefined),
+      restoreEnvironment: vi.fn(),
+      downloadFunction: vi.fn().mockResolvedValue({
+        code: new Uint8Array([0]),
+        codeSha256: sha256Base64(new Uint8Array([0])),
+        environment: {},
+      }),
       updateFunctionCode: vi.fn().mockResolvedValue({ functionName: "dev-function" }),
       invokeFunction: vi.fn(),
     };

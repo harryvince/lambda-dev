@@ -2,10 +2,11 @@ import {
   InvokeCommand,
   LambdaClient,
   UpdateFunctionCodeCommand,
+  GetFunctionCommand,
   GetFunctionConfigurationCommand,
   UpdateFunctionConfigurationCommand,
   waitUntilFunctionUpdated,
-  type GetFunctionConfigurationCommandOutput,
+  type FunctionConfiguration,
   type LambdaClientConfig,
 } from "@aws-sdk/client-lambda";
 import { z } from "zod";
@@ -14,9 +15,12 @@ import type { LoadedTarget } from "./config.js";
 import {
   applyEnvironmentPatch,
   hasEnvironmentPatch,
+  patchToMatch,
+  type EnvironmentPatchResult,
   type EnvironmentUpdateResult,
 } from "./environment.js";
 import { parseJson, type JsonValue } from "./json.js";
+import { sha256Base64, type FunctionState } from "./snapshot.js";
 
 export type { EnvironmentUpdateResult } from "./environment.js";
 
@@ -26,6 +30,9 @@ const lambdaEnvironmentSchema = z
   .optional();
 
 const lambdaEnvironmentVariablesSchema = z.record(z.string(), z.string()).optional();
+
+// Lambda's limit for a zip uploaded directly with UpdateFunctionCode, rather than through S3.
+const MAX_DIRECT_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export interface DeployResult {
   functionName: string;
@@ -44,6 +51,13 @@ export interface InvokeResult {
 
 export interface LambdaAdapter {
   updateEnvironment(loaded: LoadedTarget): Promise<EnvironmentUpdateResult>;
+  /** Replace the whole environment, e.g. with a snapshot's. */
+  restoreEnvironment(
+    loaded: LoadedTarget,
+    variables: Record<string, string>,
+  ): Promise<EnvironmentUpdateResult>;
+  /** Read the function's current code and environment, for a rollback snapshot. */
+  downloadFunction(loaded: LoadedTarget): Promise<FunctionState>;
   waitForUpdate(loaded: LoadedTarget): Promise<void>;
   updateFunctionCode(loaded: LoadedTarget, artifactBytes: Uint8Array): Promise<DeployResult>;
   invokeFunction(
@@ -69,6 +83,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
   constructor(
     private readonly clientFactory = createLambdaClient,
     private readonly updateWaiter = waitUntilFunctionUpdated,
+    private readonly downloadCode = fetchCode,
   ) {}
 
   async updateEnvironment(loaded: LoadedTarget): Promise<EnvironmentUpdateResult> {
@@ -76,6 +91,90 @@ export class AwsLambdaAdapter implements LambdaAdapter {
 
     if (!hasEnvironmentPatch(patch)) return { changed: false, updatedCount: 0, deletedCount: 0 };
 
+    return this.writeEnvironment(
+      loaded,
+      (existing) => applyEnvironmentPatch(existing, patch),
+      "Failed to synchronize Lambda environment",
+    );
+  }
+
+  async restoreEnvironment(
+    loaded: LoadedTarget,
+    variables: Record<string, string>,
+  ): Promise<EnvironmentUpdateResult> {
+    return this.writeEnvironment(
+      loaded,
+      (existing) => applyEnvironmentPatch(existing, patchToMatch(existing, variables)),
+      "Failed to restore Lambda environment",
+    );
+  }
+
+  async downloadFunction(loaded: LoadedTarget): Promise<FunctionState> {
+    try {
+      const client = this.clientFactory(loaded.target);
+
+      const result = await client.send(
+        new GetFunctionCommand({ FunctionName: loaded.target.functionName }),
+        { abortSignal: AbortSignal.timeout(120_000) },
+      );
+
+      const configuration = result.Configuration ?? {};
+
+      if (configuration.PackageType === "Image") {
+        throw new LambdaDevError("aws_snapshot", "The function is deployed as a container image", {
+          hint: "aws-lambda-dev only deploys .zip functions. Nothing was changed.",
+        });
+      }
+
+      const location = result.Code?.Location;
+      const codeSha256 = configuration.CodeSha256;
+
+      if (!location || !codeSha256) {
+        throw new LambdaDevError("aws_snapshot", "Lambda didn't return the function's code", {
+          hint: "Retry. Nothing was changed.",
+        });
+      }
+
+      const environment = this.environmentVariables(configuration);
+      const code = await this.downloadCode(location);
+
+      if (sha256Base64(code) !== codeSha256) {
+        throw new LambdaDevError("aws_snapshot", "The downloaded code doesn't match its checksum", {
+          hint: "Retry. Nothing was changed.",
+        });
+      }
+
+      if (code.byteLength > MAX_DIRECT_UPLOAD_BYTES) {
+        throw new LambdaDevError(
+          "aws_snapshot",
+          `The function's current code is ${Math.ceil(code.byteLength / 1024 / 1024)} MB, too large for rollback to upload directly`,
+          {
+            hint: "Set snapshot: false on the target to deploy without a rollback snapshot. Nothing was changed.",
+          },
+        );
+      }
+
+      return { code, codeSha256, environment };
+    } catch (error) {
+      if (error instanceof LambdaDevError) {
+        if (error.category === "aws_snapshot") throw error;
+
+        // Environment read failures (e.g. KMS access) are reported as snapshot failures here.
+        throw new LambdaDevError("aws_snapshot", error.message, {
+          hint: error.hint,
+          cause: error,
+        });
+      }
+
+      throw withCredentialsHint(snapshotAwsError(error), error, loaded.target.profile);
+    }
+  }
+
+  private async writeEnvironment(
+    loaded: LoadedTarget,
+    plan: (existing: Record<string, string>) => EnvironmentPatchResult,
+    failure: string,
+  ): Promise<EnvironmentUpdateResult> {
     try {
       const client = this.clientFactory(loaded.target);
       let configuration = await this.readConfiguration(client, loaded);
@@ -87,7 +186,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
 
       this.assertReady(configuration);
       const existing = this.environmentVariables(configuration);
-      const { variables, result } = applyEnvironmentPatch(existing, patch);
+      const { variables, result } = plan(existing);
 
       if (!result.changed) return result;
 
@@ -113,11 +212,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
       return result;
     } catch (error) {
       if (error instanceof LambdaDevError) throw error;
-      throw withCredentialsHint(
-        environmentAwsError(error, "Failed to synchronize Lambda environment"),
-        error,
-        loaded.target.profile,
-      );
+      throw withCredentialsHint(environmentAwsError(error, failure), error, loaded.target.profile);
     }
   }
 
@@ -145,9 +240,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
     );
   }
 
-  private environmentVariables(
-    configuration: GetFunctionConfigurationCommandOutput,
-  ): Record<string, string> {
+  private environmentVariables(configuration: FunctionConfiguration): Record<string, string> {
     const environment = lambdaEnvironmentSchema.safeParse(configuration.Environment);
 
     if (!environment.success) {
@@ -200,10 +293,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
     }
   }
 
-  private assertReady(
-    configuration: GetFunctionConfigurationCommandOutput,
-    requireSuccessful = false,
-  ): void {
+  private assertReady(configuration: FunctionConfiguration, requireSuccessful = false): void {
     if (
       configuration.State !== "Active" ||
       (requireSuccessful
@@ -322,6 +412,45 @@ function environmentAwsError(
         ? "Configuration changed concurrently. Rerun the deployment to read a fresh revision; no stale write was retried."
         : "Check Lambda status and IAM/KMS permissions, then retry when stable. Earlier remote changes may already have completed.",
   });
+}
+
+function snapshotAwsError(cause: unknown): LambdaDevError {
+  const code = cause instanceof Error ? cause.name : "";
+
+  const knownCodes = new Set([
+    "AccessDeniedException",
+    "ResourceNotFoundException",
+    "TooManyRequestsException",
+    "AbortError",
+    "TimeoutError",
+  ]);
+
+  return new LambdaDevError(
+    "aws_snapshot",
+    `Failed to save the function's current code for rollback${knownCodes.has(code) ? ` (${code})` : ""}`,
+    {
+      cause,
+      hint:
+        code === "AccessDeniedException"
+          ? "Allow lambda:GetFunction on the function, or set snapshot: false on the target to deploy without a rollback snapshot. Nothing was changed."
+          : "Check the function name, region, and credentials, then retry. Nothing was changed.",
+    },
+  );
+}
+
+async function fetchCode(url: string): Promise<Uint8Array> {
+  // The URL is a presigned S3 link to the function's code, returned by GetFunction.
+  const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+
+  if (!response.ok) {
+    throw new LambdaDevError(
+      "aws_snapshot",
+      `Downloading the function's code failed (HTTP ${response.status})`,
+      { hint: "Retry. Nothing was changed." },
+    );
+  }
+
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 function withCredentialsHint(

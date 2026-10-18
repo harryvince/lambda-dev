@@ -48,6 +48,14 @@ aws-lambda-dev invoke [target] [-c lambda-dev.yml] [--payload-file <path>] [--pa
 
 Invokes the function as it is now, without building or uploading. Environment variables aren't synced.
 
+## `rollback`
+
+```bash
+aws-lambda-dev rollback [target] [-c lambda-dev.yml]
+```
+
+Restores the target's function to its snapshot from before the first deploy: the original environment variables and code. Then deletes the snapshot. Fails without changing anything if there's no snapshot. See [Rollback](rollback.md).
+
 ## `watch`
 
 ```bash

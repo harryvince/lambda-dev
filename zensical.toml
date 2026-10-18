@@ -14,6 +14,7 @@ nav = [
     "configuration.md",
     "copying-files.md",
     "environment-variables.md",
+    "rollback.md",
   ] },
   { "Reference" = [
     "iam-permissions.md",

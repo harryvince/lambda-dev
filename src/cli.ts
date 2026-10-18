@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { z } from "zod";
-import { deployTarget, invokeTarget, validateTarget } from "./core.js";
+import { deployTarget, invokeTarget, rollbackTarget, validateTarget } from "./core.js";
 import { formatError, consoleLogger } from "./output.js";
 import { writeStarterConfig } from "./scaffold.js";
 import { watchTarget } from "./watch.js";
@@ -70,6 +70,19 @@ export function createProgram(): Command {
         targetName: target,
         payloadFile: options.payloadFile,
         payloadJson: options.payloadJson,
+        logger: consoleLogger,
+      });
+    });
+
+  program
+    .command("rollback")
+    .description("Restore a target's function to how it was before its first deploy.")
+    .argument("[target]", "Target name")
+    .option("-c, --config <path>", "Config file path", "lambda-dev.yml")
+    .action(async (target, options) => {
+      await rollbackTarget({
+        configPath: options.config,
+        targetName: target,
         logger: consoleLogger,
       });
     });
