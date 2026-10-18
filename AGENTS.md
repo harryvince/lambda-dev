@@ -19,7 +19,7 @@ prek run --all-files  # every Git hook
 
 **The prek Git hooks are mandatory.** Every commit must pass `fix`, `lint`, `scan-deps`, and `scan-code` (see `.pre-commit-config.yaml`). Never use `git commit --no-verify`. If a hook fails, fix the cause; don't weaken the hook, the lint config, or a rule.
 
-Releases go through `mise run version` (standard-version: bumps `package.json`, writes `CHANGELOG.md`, tags and pushes); the pushed `v*` tag triggers `.github/workflows/publish.yml`, which publishes to npm. Don't run these, or edit `CHANGELOG.md` or the package version by hand, unless asked.
+Releases go through `mise run version` (standard-version: bumps `package.json`, writes `CHANGELOG.md`, tags and pushes, then `mise run release` creates the GitHub release from that changelog section); the pushed `v*` tag triggers `.github/workflows/publish.yml`, which publishes to npm. Don't run these, or edit `CHANGELOG.md` or the package version by hand, unless asked.
 
 ## Layout
 

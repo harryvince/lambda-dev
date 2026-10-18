@@ -110,7 +110,9 @@ When you change user-facing behaviour, update the docs in the same pull request.
 mise run version
 ```
 
-This uses [standard-version](https://github.com/conventional-changelog/standard-version) to bump `package.json` from the commit messages since the last release, update `CHANGELOG.md`, create a `vX.Y.Z` tag, and push.
+This uses [standard-version](https://github.com/conventional-changelog/standard-version) to bump `package.json` from the commit messages since the last release, update `CHANGELOG.md`, create a `vX.Y.Z` tag, and push. It then runs `mise run release`, which creates the GitHub release with that version's `CHANGELOG.md` section as its notes (needs the [GitHub CLI](https://cli.github.com), signed in). If that step fails, fix the cause and run `mise run release` again.
+
+A `BREAKING CHANGE:` footer must be the last paragraph of the commit message, after any trailers such as `Co-Authored-By:`, or standard-version copies the trailers into the changelog.
 
 The tag triggers `.github/workflows/publish.yml`, which:
 

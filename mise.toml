@@ -83,8 +83,17 @@ depends = ["build"]
 run = "bun publish"
 
 [tasks.version]
-description = "Runs standard-version and tags the repo"
-run = "bunx standard-version && git push && git push --tags"
+description = "Bump the version, tag and push, then create the GitHub release."
+run = ["bunx standard-version", "git push --follow-tags", "mise run release"]
+
+[tasks.release]
+description = "Create the GitHub release for the current version from CHANGELOG.md."
+run = """
+set -e
+version="v$(node -p "require('./package.json').version")"
+notes="$(bun scripts/release-notes.ts)"
+gh release create "$version" --verify-tag --title "$version" --notes "$notes"
+"""
 
 [tasks."docs:serve"]
 description = "Preview the documentation site with live reload."
