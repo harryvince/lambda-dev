@@ -6,3 +6,5 @@ coverage/
 .DS_Store
 lambda-dev-*.tgz
 aws-lambda-dev-*.tgz
+site/
+.cache/

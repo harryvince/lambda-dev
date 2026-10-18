@@ -36,6 +36,8 @@ Releases go through `mise run version` (standard-version: bumps `package.json`, 
 
 Tests live in `test/<module>.test.ts`, named after the source module they cover.
 
+User documentation is a [Zensical](https://zensical.org) site: Markdown pages in `docs/`, navigation and theme in `zensical.toml`. Preview with `mise run docs:serve`; `mise run docs:build` builds with `--strict`, so broken links fail. `.github/workflows/docs.yml` deploys it to GitHub Pages on pushes to `main`.
+
 ## Conventions
 
 - ESM with `NodeNext` resolution: relative imports in `src/` must use the `.js` extension.
@@ -52,4 +54,4 @@ Tests live in `test/<module>.test.ts`, named after the source module they cover.
 - Configuration writes use the read `RevisionId` and are never retried blindly on conflict. Waits are bounded to 120 s.
 - **Never log environment values.** That covers sync logs, error messages, YAML parse errors (which can echo source lines), and AWS waiter errors (which can embed the full function configuration). Existing code drops these details on purpose.
 - Copy safety: reject absolute or `..` destinations, collisions with `index.js`, `index.js.map` and `function.zip`, sources that overlap the out dir, and any symlinks. Preserve file modes in the output and the zip.
-- If you change user-facing behaviour, update `README.md` to match.
+- If you change user-facing behaviour, update `docs/` (and `README.md` where it overlaps) to match.

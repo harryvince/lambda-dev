@@ -2,6 +2,8 @@
 
 `aws-lambda-dev` is a local developer CLI for existing AWS Lambda functions. It watches source files, bundles a Node.js Lambda with esbuild, uploads the generated zip to AWS Lambda, and can invoke the function after each successful deploy.
 
+**Documentation: https://harryvince.github.io/lambda-dev/**
+
 ## Quick Start
 
 ```bash
