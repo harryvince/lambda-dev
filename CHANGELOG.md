@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.0.0](https://github.com/harryvince/lambda-dev/compare/v1.2.2...v2.0.0) (2026-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* the CLI requires Node.js ^22.20.0 || >=24.8.0, and watch globs no longer match dotfiles implicitly.
+* string invoke payloads are sent as JSON strings rather than raw text.
+
+### Features
+
+* publish a JSON Schema for lambda-dev.yml ([55dfb6b](https://github.com/harryvince/lambda-dev/commit/55dfb6bd8b5fdd5aa8be532e577223dec4fe2431))
+* require Node 22.20+ or 24.8+ and use built-in globbing ([56564a5](https://github.com/harryvince/lambda-dev/commit/56564a5759b67125ce9121e43e315c70c7fd5002))
+
+
+### Bug Fixes
+
+* parse external data at boundaries to satisfy anti-slop rules ([01e42c1](https://github.com/harryvince/lambda-dev/commit/01e42c1345b5966f5a294f61c406788f09700b1c))
+
 ### [1.2.2](https://github.com/harryvince/lambda-dev/compare/v1.2.1...v1.2.2) (2026-10-18)
 
 ### [1.2.1](https://github.com/harryvince/lambda-dev/compare/v1.2.0...v1.2.1) (2026-10-16)
