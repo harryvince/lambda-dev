@@ -2,6 +2,10 @@
   "name": "aws-lambda-dev",
   "version": "1.2.2",
   "description": "Hot-reload, deploy, and invoke existing AWS Lambda functions from a YAML-configured local workflow.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harryvince/lambda-dev.git"
+  },
   "bin": {
     "aws-lambda-dev": "dist/cli.js"
   },
