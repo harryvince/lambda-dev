@@ -23,6 +23,20 @@ run = "bun run build"
 description = "Regenerate docs/schema.json from the config schema."
 run = "bun scripts/generate-schema.ts"
 
+[tasks."scan:deps"]
+description = "Scan dependencies (bun.lock) for known vulnerabilities with Trivy."
+tools = { trivy = "0.76.0" }
+run = "trivy fs --scanners vuln --include-dev-deps --exit-code 1 ."
+
+[tasks."scan:code"]
+description = "Scan source code and workflows for security issues with Semgrep."
+tools = { "pipx:semgrep" = "1.181.0" }
+run = "semgrep scan --metrics=off --error --config p/default --config p/typescript --config p/nodejs --config p/github-actions"
+
+[tasks.scan]
+description = "Run all security scans."
+depends = ["scan:deps", "scan:code"]
+
 [tasks.check]
 description = "Run typecheck, tests, and build with Bun."
 depends = ["typecheck", "test", "build"]

@@ -21,6 +21,18 @@ mise run typecheck  # types only
 
 Tests use Vitest and never call AWS; they inject fake Lambda clients and build functions. Run `mise run check` before opening a pull request.
 
+## Security scans
+
+```bash
+mise run scan:deps  # Trivy: known vulnerabilities in bun.lock, including dev dependencies
+mise run scan:code  # Semgrep: security issues in the source and GitHub workflows
+mise run scan       # both
+```
+
+Each task installs its scanner at a pinned version the first time it runs, so `mise install` stays light. Both exit non-zero when they find something.
+
+Most dependency findings are fixed by updating the affected package, or the package that pulls it in, and refreshing `bun.lock`. For a Semgrep finding that's a false positive, add a `// nosemgrep: <rule-id>` comment on the line with a short reason.
+
 ## Config schema
 
 `docs/schema.json` is generated from the zod schema in `src/config.ts` and published with the docs site. After changing the config schema, regenerate it:

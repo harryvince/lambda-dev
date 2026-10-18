@@ -12,6 +12,7 @@ mise run install      # bun install
 mise run check        # typecheck + test + build — run before finishing any change
 mise run test         # vitest run
 mise run typecheck    # tsc --noEmit
+mise run scan         # Trivy dependency scan + Semgrep code scan
 ```
 
 Releases go through `mise run version` (standard-version: bumps `package.json`, writes `CHANGELOG.md`, tags and pushes); the pushed `v*` tag triggers `.github/workflows/publish.yml`, which publishes to npm. Don't run these, or edit `CHANGELOG.md` or the package version by hand, unless asked.
