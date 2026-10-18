@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.3.0](https://github.com/harryvince/lambda-dev/compare/v2.2.0...v2.3.0) (2026-10-18)
+
+
+### Features
+
+* add a build command that builds a target without deploying it ([4d74663](https://github.com/harryvince/lambda-dev/commit/4d74663078f5ec007b99e1ea0cf890d763bae205))
+* add response checks for deployment validation ([5aa2efb](https://github.com/harryvince/lambda-dev/commit/5aa2efb13b92a39d1fa019cd05b7f04fa9a0c05b))
+
 ## [2.2.0](https://github.com/harryvince/lambda-dev/compare/v2.1.0...v2.2.0) (2026-10-18)
 
 
