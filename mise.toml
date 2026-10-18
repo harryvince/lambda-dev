@@ -1,7 +1,7 @@
 [tools]
-node = "26.4.0"
-bun = "1.3.14"
-uv = "0.12.19"
+node = "26.12.0"
+bun = "1.4.3"
+uv = "0.13.1"
 prek = "0.5.5"
 
 [tasks.install]
@@ -23,8 +23,8 @@ env = { GATEWAY_PORT = "4599", AWS_ENDPOINT_URL = "http://localhost:4599", AWS_A
 run = """
 set -e
 unset AWS_PROFILE AWS_SESSION_TOKEN
-uvx ministack@1.5.20 -d
-trap 'uvx ministack@1.5.20 --stop' EXIT
+uvx ministack@1.5.29 -d
+trap 'uvx ministack@1.5.29 --stop' EXIT
 curl -sf --retry 30 --retry-delay 1 --retry-connrefused -o /dev/null "$AWS_ENDPOINT_URL/_localstack/health"
 bun run test:e2e
 """
