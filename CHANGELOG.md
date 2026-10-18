@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.4.0](https://github.com/harryvince/lambda-dev/compare/v2.3.0...v2.4.0) (2026-10-18)
+
+
+### Features
+
+* add protected targets, guard code uploads by revision, and warn on large zips ([6caae94](https://github.com/harryvince/lambda-dev/commit/6caae945334c5bf6e48363e34e87eec0f8f080a7))
+
 ## [2.3.0](https://github.com/harryvince/lambda-dev/compare/v2.2.0...v2.3.0) (2026-10-18)
 
 

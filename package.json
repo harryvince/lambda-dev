@@ -1,6 +1,6 @@
 {
   "name": "aws-lambda-dev",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Hot-reload, deploy, and invoke existing AWS Lambda functions from a YAML-configured local workflow.",
   "license": "MIT",
   "repository": {
