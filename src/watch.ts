@@ -141,6 +141,9 @@ function globToRegExp(pattern: string): RegExp {
     source += escapeRegExp(char);
   }
 
+  // The pattern comes from the user's own watch config, every regex metacharacter is escaped above,
+  // and it only ever matches local file paths, so it isn't an untrusted-input ReDoS risk.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
   return new RegExp(`${source}$`);
 }
 
