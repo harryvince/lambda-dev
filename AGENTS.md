@@ -1,37 +1,55 @@
-# Repository Instructions
+# AGENTS.md
 
-## Project Shape
-
-- This repository root is the project workspace. Do not assume it is only a wrapper around `.ai/`.
-- The `.ai/` directory is the required AI delivery operating system for this repo. Follow the workflows, standards, roles, commands, templates, and schemas in `.ai/` when completing work here.
-- Application/product code may be added outside `.ai/`. Treat that code as the primary implementation area unless the task explicitly asks to change the AI delivery system itself.
-- Nothing has been implemented in this repo yet; preserve the delivery lifecycle so future work starts from a clean, documented baseline.
-
-## Required Operating Context
-
-- Before non-trivial implementation, consult `.ai/README.md` and the relevant files under `.ai/workflows/`, `.ai/standards/`, `.ai/roles/`, and `.ai/commands/`.
-- Use `.ai/commands/command-protocol.md` for slash-command semantics and lifecycle transitions.
-- Use `.ai/standards/` as the quality bar for engineering, testing, security, accessibility, performance, observability, backend, frontend, API design, and UI/UX work.
-- Use `.ai/templates/` for durable planning, requirements, test, review, and approval artifacts when a feature workflow calls for them.
-- Keep `.ai/schemas/` compatibility when editing any lifecycle state, registry, config, or approval JSON.
-
-## Lifecycle Constraints
-
-- Default approval policy is `human_required` for requirements, plan, and implementation gates unless repo config says otherwise.
-- Agents may record approvals after a human gives them, but must never self-approve a `human_required` gate.
-- Do not begin implementation for non-trivial work before the required requirements and plan gates are satisfied.
-- Treat feature state and approval files as durable project state, not scratch notes.
+`aws-lambda-dev` is a published npm CLI for iterating on an **existing** AWS Lambda function from a local machine. It reads `lambda-dev.yml`, bundles a Node.js handler with esbuild into a zip, optionally patches the function's environment variables, uploads the code with `UpdateFunctionCode`, and optionally invokes the function. `watch` repeats that loop on file changes. It never creates or deletes Lambda functions or other AWS resources.
 
 ## Commands
 
-- If working on the AI delivery CLI or standards package inside `.ai/`, run checks from `.ai/`: `npm run check`.
-- Equivalent direct CLI checks from `.ai/`: `node --check bin/ai-delivery.js` and `node bin/ai-delivery.js help >/dev/null`.
-- From the repo root, local AI delivery CLI runs use `node .ai/bin/ai-delivery.js <command>`.
-- CLI commands are `init`, `sync`, `feature`, `loop`, `doctor`, `help`, and `version`; no bare `/start-feature` CLI subcommand exists.
-- Use `--dry-run` before `init`, `sync`, `feature`, or loop setup when previewing generated files.
+Tooling is pinned in `mise.toml` (Node, Bun). Use Bun, not npm, for local work.
 
-## Editing Guidance
+```bash
+mise install          # install toolchain
+mise run install      # bun install
+mise run check        # typecheck + test + build — run before finishing any change
+mise run test         # vitest run
+mise run typecheck    # tsc --noEmit
+```
 
-- Do not modify `.ai/` unless the task is about AI delivery workflows, standards, templates, schemas, roles, commands, or the CLI itself.
-- When generated or lifecycle artifacts are required, update them consistently with `.ai/README.md` and `.ai/commands/command-protocol.md`.
-- Prefer the smallest correct change and preserve existing project state.
+Releases go through `mise run version` (standard-version: bumps `package.json`, writes `CHANGELOG.md`, tags and pushes) and then `mise run publish`. Don't run these, or edit `CHANGELOG.md` or the package version by hand, unless asked.
+
+## Layout
+
+| File | Responsibility |
+| --- | --- |
+| `src/cli.ts` | commander entrypoint (`dist/cli.js` is the `bin`). Commands: `init`, `validate`, `deploy`, `invoke`, `watch`. Thin; delegates to `core`/`watch`. |
+| `src/core.ts` | Use cases: `deployTarget` (build → env sync → upload → wait → invoke), `invokeTarget`, `validateTarget`, payload resolution. Takes injectable `RuntimeDeps`. |
+| `src/config.ts` | YAML loading (anchors/merge keys on, alias count capped) and the zod schema. `loadTarget` picks the target and defaults `build.outDir` to `.lambda-dev/<target>`. |
+| `src/build.ts` | esbuild bundle to `index.js`, then zip with the sourcemap and copied assets into `function.zip`. |
+| `src/copy.ts` | Resolves and validates `build.copy` entries (files, directories, globs) into a manifest **before** the out dir is cleared. |
+| `src/aws.ts` | `LambdaAdapter` interface and `AwsLambdaAdapter` (AWS SDK v3). Handles env read-merge-write with `RevisionId`, update waiters, upload, invoke. |
+| `src/environment.ts` | Reserved env var names, patch merge logic, 4 KB limit check. |
+| `src/watch.ts` | chokidar watcher, include/exclude glob matching, `SerializedDebouncedRunner` (debounced, one deploy at a time, coalesces changes made mid-deploy). |
+| `src/errors.ts` | `LambdaDevError` with a `category` and optional `hint`. |
+| `src/output.ts` | Logger and `[target] stage: message` formatting. |
+| `src/scaffold.ts` | Writes the starter config for `init`. |
+| `src/index.ts` | Library re-exports. |
+| `examples/lambda-dev.yml` | Example config shipped in the package. |
+
+Tests live in `test/<module>.test.ts`, named after the source module they cover.
+
+## Conventions
+
+- ESM with `NodeNext` resolution: relative imports in `src/` must use the `.js` extension.
+- Strict TypeScript. Dependencies are pinned to exact versions; keep it that way.
+- Errors that reach the user must be `LambdaDevError` with one of the existing categories (`validation`, `build`, `aws_deploy`, `aws_configuration`, `aws_invoke`, `filesystem`, `unexpected`). Wrap unknown errors with `toLambdaDevError`. The README troubleshooting section is keyed by these categories.
+- Config schemas are `.strict()`: new config keys need a schema change, a README section, and usually an update to `examples/lambda-dev.yml` and `src/scaffold.ts`.
+- Config-relative paths (entry, copy sources, payload files, watch globs) resolve against the directory containing `lambda-dev.yml`, not the CWD.
+- Tests must not call AWS. Inject a fake `LambdaAdapter` and/or `buildArtifact` through `deps`, and a fake `watchFactory` for watch tests. Use temp directories (`mkdtemp`) for filesystem fixtures.
+
+## Behaviour to preserve
+
+- **Ordering:** load and validate config, then build locally, then change AWS. Validation or build failures must never reach AWS.
+- **Environment sync** is a patch, not a replacement. A string sets a variable, `null` deletes it, and unlisted remote variables are kept. A missing or empty `environment` skips configuration calls entirely, so code-only targets need only `UpdateFunctionCode`/`InvokeFunction` IAM permissions.
+- Configuration writes use the read `RevisionId` and are never retried blindly on conflict. Waits are bounded to 120 s.
+- **Never log environment values.** That covers sync logs, error messages, YAML parse errors (which can echo source lines), and AWS waiter errors (which can embed the full function configuration). Existing code drops these details on purpose.
+- Copy safety: reject absolute or `..` destinations, collisions with `index.js`, `index.js.map` and `function.zip`, sources that overlap the out dir, and any symlinks. Preserve file modes in the output and the zip.
+- If you change user-facing behaviour, update `README.md` to match.
