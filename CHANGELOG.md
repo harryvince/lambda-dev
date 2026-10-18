@@ -7,33 +7,33 @@ All notable changes to this project will be documented in this file. See [standa
 
 ### Bug Fixes
 
-* vuln with adm-zip ([07b2ba9](https://github.com/harryvince/lambda-dev/commit/07b2ba959b14571550876aba54099feaecad955b))
+* vuln with adm-zip ([dc88529](https://github.com/harryvince/lambda-dev/commit/dc885296724579ce7d4a66283f3f85007819868b))
 
 ## [1.2.0](https://github.com/harryvince/lambda-dev/compare/v1.1.0...v1.2.0) (2026-10-15)
 
 
 ### Features
 
-* support Lambda environment variable updates ([e93ddb1](https://github.com/harryvince/lambda-dev/commit/e93ddb1136ce8edc30eddcc9c741701436951b65))
+* support Lambda environment variable updates ([12009e1](https://github.com/harryvince/lambda-dev/commit/12009e11be82ddce8d7e5fe9a7f5e3b50530fb91))
 
 ## [1.1.0](https://github.com/harryvince/lambda-dev/compare/v1.0.2...v1.1.0) (2026-10-15)
 
 
 ### Features
 
-* implement copy-plugin from eslint ([c2f33c8](https://github.com/harryvince/lambda-dev/commit/c2f33c8eec4d116b7e9829c44a41d6d07c213891))
+* implement copy-plugin from eslint ([06d0830](https://github.com/harryvince/lambda-dev/commit/06d0830b76ce733c105289d16fa7b4e893f4f387))
 
 ### [1.0.2](https://github.com/harryvince/lambda-dev/compare/v1.0.1...v1.0.2) (2026-06-30)
 
 ### Bug Fixes
 
-- watch feature ([db207b3](https://github.com/harryvince/lambda-dev/commit/db207b32bca0495470b09b69a552dff2a1ef52b4))
+- watch feature ([9710a0a](https://github.com/harryvince/lambda-dev/commit/9710a0aca6e11cbdfd7a096db28e0d78424be986))
 
 ### [1.0.1](https://github.com/harryvince/lambda-dev/compare/v1.0.0...v1.0.1) (2026-06-30)
 
 ### Bug Fixes
 
-- command invocation not doing anything ([8045f97](https://github.com/harryvince/lambda-dev/commit/8045f97c048c1a1d3b969337f4611bf18300d2a4))
+- command invocation not doing anything ([aec3e7b](https://github.com/harryvince/lambda-dev/commit/aec3e7b9ad1474fde08f5f00babc4d39b233e0de))
 
 ## 1.0.0 (2026-06-30)
 
