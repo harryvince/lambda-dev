@@ -53,6 +53,8 @@ mise run publish
 
 Run `mise run version` before publish tasks so release versioning is handled by the configured release workflow, then run `publish:dry-run` before the real publish task.
 
+Pushing a `v*` tag (which `mise run version` does) also triggers `.github/workflows/publish.yml`. It checks the tag matches `package.json`, runs `mise run check`, and publishes with provenance using npm trusted publishing, so no npm token is stored in GitHub. Use either the workflow or the local `publish` task for a release, not both.
+
 ## Config
 
 ```yaml

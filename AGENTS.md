@@ -14,7 +14,7 @@ mise run test         # vitest run
 mise run typecheck    # tsc --noEmit
 ```
 
-Releases go through `mise run version` (standard-version: bumps `package.json`, writes `CHANGELOG.md`, tags and pushes) and then `mise run publish`. Don't run these, or edit `CHANGELOG.md` or the package version by hand, unless asked.
+Releases go through `mise run version` (standard-version: bumps `package.json`, writes `CHANGELOG.md`, tags and pushes); the pushed `v*` tag triggers `.github/workflows/publish.yml`, which publishes to npm. Don't run these, or edit `CHANGELOG.md` or the package version by hand, unless asked.
 
 ## Layout
 
