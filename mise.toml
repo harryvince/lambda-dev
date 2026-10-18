@@ -44,8 +44,8 @@ run = "trivy fs --scanners vuln --include-dev-deps --exit-code 1 ."
 
 [tasks."scan:code"]
 description = "Scan source code and workflows for security issues with Semgrep."
-tools = { "pipx:semgrep" = "1.181.0" }
-run = "semgrep scan --metrics=off --error --config p/default --config p/typescript --config p/nodejs --config p/github-actions"
+# uvx with a uv-managed Python, so the scan doesn't depend on whichever Python is installed locally.
+run = "uvx --managed-python --python 3.14.8 semgrep@1.181.0 scan --metrics=off --error --config p/default --config p/typescript --config p/nodejs --config p/github-actions"
 
 [tasks.scan]
 description = "Run all security scans."
