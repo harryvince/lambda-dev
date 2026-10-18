@@ -45,3 +45,4 @@ Each deploy cycle runs the same steps, in order:
 - [Configuration](configuration.md): every option in `lambda-dev.yml`.
 - [Commands](commands.md): CLI reference.
 - [Rollback](rollback.md): put a function back as it was before your first deploy.
+- [Checks](checks.md): verify a deploy by invoking it with known events and comparing the responses.

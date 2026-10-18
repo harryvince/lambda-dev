@@ -10,7 +10,7 @@ Errors are printed as `[category] message`, usually with a `Hint:` line. The cat
 | `aws_snapshot` | Saving the rollback snapshot before the first deploy | No |
 | `aws_configuration` | Syncing environment variables, or waiting for an update | Possibly |
 | `aws_deploy` | Uploading code | Environment may have been updated |
-| `aws_invoke` | Invoking | Code was uploaded |
+| `aws_invoke` | Invoking, or a response didn't match a check or `invoke.expect` | Code was uploaded (by `deploy`) |
 | `unexpected` | Anything else | Depends |
 
 ## `validation`
@@ -64,7 +64,9 @@ The code upload failed. Usually credentials, region, function name, or a missing
 
 ## `aws_invoke`
 
-The upload succeeded but invoking failed, usually a missing `lambda:InvokeFunction` permission. If the function ran and threw an error, that isn't reported here: the invoke summary shows `functionError Unhandled` instead.
+Invoking failed, usually because of a missing `lambda:InvokeFunction` permission. If the function ran and threw an error, that isn't reported here unless an expectation is set: the invoke summary shows `functionError Unhandled` instead.
+
+It's also reported when a response doesn't match a [check](checks.md) or `invoke.expect`. Each mismatch is printed with its location, such as `payload.statusCode: expected 200, received 500`. After `deploy`, the new code is already live; nothing is rolled back. If you're sending an event that should get a different response, pass `--no-expect`.
 
 ## Watch doesn't react to changes
 

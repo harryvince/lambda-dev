@@ -272,9 +272,102 @@
                   "None",
                   "Tail"
                 ]
+              },
+              "expect": {
+                "type": "object",
+                "properties": {
+                  "statusCode": {
+                    "description": "Lambda's invoke status code, normally 200. Not the statusCode in your payload.",
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "functionError": {
+                    "default": false,
+                    "description": "Whether the function should fail with an unhandled error (FunctionError). Default false.",
+                    "type": "boolean"
+                  },
+                  "payload": {
+                    "description": "Expected response. Objects match if every listed key matches, so other keys are ignored; arrays and other values must be equal.",
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/__schema0"
+                      }
+                    ]
+                  },
+                  "exact": {
+                    "default": false,
+                    "description": "Require the payload to equal the expected one exactly, with no extra keys.",
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "What a successful response looks like. The command fails otherwise."
               }
             },
             "additionalProperties": false
+          },
+          "checks": {
+            "default": {},
+            "description": "Named checks, such as a health check, run by the check command and deploy --check.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "payloadFile": {
+                  "description": "JSON event file, relative to the config file.",
+                  "type": "string"
+                },
+                "payloadJson": {
+                  "description": "Inline event. Takes priority over payloadFile.",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/__schema0"
+                    }
+                  ]
+                },
+                "expect": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "description": "Lambda's invoke status code, normally 200. Not the statusCode in your payload.",
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "functionError": {
+                      "default": false,
+                      "description": "Whether the function should fail with an unhandled error (FunctionError). Default false.",
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "description": "Expected response. Objects match if every listed key matches, so other keys are ignored; arrays and other values must be equal.",
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema0"
+                        }
+                      ]
+                    },
+                    "exact": {
+                      "default": false,
+                      "description": "Require the payload to equal the expected one exactly, with no extra keys.",
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "What a successful response looks like. The command fails otherwise."
+                }
+              },
+              "required": [
+                "expect"
+              ],
+              "additionalProperties": false,
+              "description": "An invocation with a known event and an expected response."
+            }
           }
         },
         "required": [

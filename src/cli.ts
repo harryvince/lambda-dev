@@ -3,7 +3,14 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { z } from "zod";
-import { buildTarget, deployTarget, invokeTarget, rollbackTarget, validateTarget } from "./core.js";
+import {
+  buildTarget,
+  checkTarget,
+  deployTarget,
+  invokeTarget,
+  rollbackTarget,
+  validateTarget,
+} from "./core.js";
 import { formatError, consoleLogger } from "./output.js";
 import { writeStarterConfig } from "./scaffold.js";
 import { watchTarget } from "./watch.js";
@@ -62,12 +69,16 @@ export function createProgram(): Command {
     .option("--payload-file <path>", "Invoke payload JSON file")
     .option("--payload-json <json>", "Invoke payload JSON string")
     .option("--no-cache", "Rebuild even if a cached build matches")
+    .option("--no-expect", "Don't compare the invoke response with invoke.expect")
+    .option("--check", "Run the target's checks after uploading")
     .action(async (target, options) => {
       await deployTarget({
         configPath: options.config,
         targetName: target,
         invoke: options.invoke,
         cache: options.cache,
+        expect: options.expect,
+        check: options.check,
         payloadFile: options.payloadFile,
         payloadJson: options.payloadJson,
         logger: consoleLogger,
@@ -81,12 +92,29 @@ export function createProgram(): Command {
     .option("-c, --config <path>", "Config file path", "lambda-dev.yml")
     .option("--payload-file <path>", "Invoke payload JSON file")
     .option("--payload-json <json>", "Invoke payload JSON string")
+    .option("--no-expect", "Don't compare the response with invoke.expect")
     .action(async (target, options) => {
       await invokeTarget({
         configPath: options.config,
         targetName: target,
         payloadFile: options.payloadFile,
         payloadJson: options.payloadJson,
+        expect: options.expect,
+        logger: consoleLogger,
+      });
+    });
+
+  program
+    .command("check")
+    .description("Invoke a target with each check's event and verify the responses.")
+    .argument("[target]", "Target name")
+    .argument("[checks...]", "Checks to run (default: all)")
+    .option("-c, --config <path>", "Config file path", "lambda-dev.yml")
+    .action(async (target, checks, options) => {
+      await checkTarget({
+        configPath: options.config,
+        targetName: target,
+        names: checks,
         logger: consoleLogger,
       });
     });

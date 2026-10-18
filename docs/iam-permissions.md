@@ -24,7 +24,7 @@ The credentials you run the CLI with need these actions on the target function. 
 | Action | Needed for |
 | --- | --- |
 | `lambda:UpdateFunctionCode` | Every `deploy` and `watch` cycle. |
-| `lambda:InvokeFunction` | `invoke`, `deploy --invoke`, and `invoke.afterDeploy`. |
+| `lambda:InvokeFunction` | `invoke`, `check`, `deploy --invoke`, `deploy --check`, and `invoke.afterDeploy`. |
 | `lambda:GetFunction` | The [rollback snapshot](rollback.md) before the first deploy to a function. Not needed with `snapshot: false`. |
 | `lambda:GetFunctionConfiguration` | Targets with a non-empty `environment`, and `rollback`. |
 | `lambda:UpdateFunctionConfiguration` | Targets with a non-empty `environment`, and `rollback`. |

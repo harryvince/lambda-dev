@@ -7,6 +7,11 @@ const SECRET_KEY_PATTERN =
 
 const MAX_PREVIEW_CHARS = 2000;
 
+/** Whether a value under this key could be a secret, so its value shouldn't be printed. */
+export function isSecretKey(key: string): boolean {
+  return SECRET_KEY_PATTERN.test(key);
+}
+
 export interface Logger {
   info(message: string): void;
   warn(message: string): void;
@@ -25,7 +30,7 @@ const AWS_CREDENTIAL_ASSIGNMENT =
 /** Replace values under secret-looking keys, and inline AWS credential assignments, with "[redacted]". */
 export function redact(value: JsonValue): JsonValue {
   const serialized = JSON.stringify(value, (key, entry) =>
-    SECRET_KEY_PATTERN.test(key) ? "[redacted]" : entry,
+    isSecretKey(key) ? "[redacted]" : entry,
   );
 
   return parseJson(serialized.replace(AWS_CREDENTIAL_ASSIGNMENT, "$1=[redacted]"));

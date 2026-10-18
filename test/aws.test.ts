@@ -126,6 +126,7 @@ function loadedTarget(): LoadedTarget {
       },
       watch: { include: ["src/**/*.ts"], exclude: [], debounceMs: 300 },
       invoke: { afterDeploy: false, logType: "Tail" },
+      checks: {},
     },
   };
 }

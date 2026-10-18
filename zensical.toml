@@ -13,6 +13,7 @@ nav = [
     "commands.md",
     "configuration.md",
     "copying-files.md",
+    "checks.md",
     "environment-variables.md",
     "rollback.md",
   ] },

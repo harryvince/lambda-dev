@@ -7,7 +7,8 @@ import {
   type LambdaAdapter,
   type DeployResult,
 } from "./aws.js";
-import { loadTarget, type LoadedTarget } from "./config.js";
+import { loadTarget, type CheckConfig, type Expectation, type LoadedTarget } from "./config.js";
+import { findMismatches } from "./expect.js";
 import { logStep, previewPayload, type Logger } from "./output.js";
 import { hasEnvironmentPatch, type EnvironmentUpdateResult } from "./environment.js";
 import { parseJson, type JsonValue } from "./json.js";
@@ -34,6 +35,10 @@ export interface DeployOptions {
   payloadJson?: string;
   /** false skips the build cache for this deploy, whatever build.cache says. */
   cache?: boolean;
+  /** false skips invoke.expect for this deploy's invoke. */
+  expect?: boolean;
+  /** Run every configured check after the upload. */
+  check?: boolean;
   logger: Logger;
   deps?: Partial<RuntimeDeps>;
 }
@@ -47,11 +52,29 @@ export interface BuildOptions {
   deps?: Partial<RuntimeDeps>;
 }
 
+export interface CheckOptions {
+  configPath?: string;
+  targetName?: string;
+  /** Checks to run, by name. All of them when empty or missing. */
+  names?: string[];
+  logger: Logger;
+  deps?: Partial<RuntimeDeps>;
+}
+
+export interface CheckResult {
+  name: string;
+  invoke: InvokeResult;
+  /** Why the response didn't match; empty when the check passed. */
+  mismatches: string[];
+}
+
 export interface InvokeOptions {
   configPath?: string;
   targetName?: string;
   payloadFile?: string;
   payloadJson?: string;
+  /** false skips invoke.expect for this invoke. */
+  expect?: boolean;
   logger: Logger;
   deps?: Partial<RuntimeDeps>;
 }
@@ -75,6 +98,7 @@ export interface DeploySummary {
   deploy: DeployResult;
   invoke?: InvokeResult;
   environment?: EnvironmentUpdateResult;
+  checks?: CheckResult[];
 }
 
 /** Build a target's zip without touching AWS. */
@@ -101,6 +125,8 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     assertOutDirKeepsSnapshots(loaded);
   }
 
+  // Fail on a check-less target before building, like any other config problem.
+  const checks = options.check ? selectChecks(loaded, []) : [];
   const build = await runBuild(loaded, deps, options.logger);
 
   if (loaded.target.snapshot) {
@@ -155,18 +181,32 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     summary.environment = environment;
   }
 
-  if (!shouldInvoke) {
-    return summary;
+  if (shouldInvoke) {
+    const payload = await resolvePayload(loaded, options.payloadFile, options.payloadJson);
+    logStep(options.logger, loaded.targetName, "invoke", `Payload ${previewPayload(payload, 300)}`);
+    const invoke = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
+    logStep(options.logger, loaded.targetName, "invoke", formatInvokeSummary(invoke));
+    summary.invoke = invoke;
+
+    if (options.expect !== false) {
+      assertInvokeExpectation(loaded, invoke, options.logger);
+    }
   }
 
-  const payload = await resolvePayload(loaded, options.payloadFile, options.payloadJson);
-  logStep(options.logger, loaded.targetName, "invoke", `Payload ${previewPayload(payload, 300)}`);
-  const invoke = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
-  logStep(options.logger, loaded.targetName, "invoke", formatInvokeSummary(invoke));
-
-  summary.invoke = invoke;
+  if (checks.length > 0) {
+    summary.checks = await runChecks(loaded, checks, deps, options.logger);
+  }
 
   return summary;
+}
+
+/** Invoke a target with each named check's event and compare the responses with what's expected. */
+export async function checkTarget(options: CheckOptions): Promise<CheckResult[]> {
+  const loaded = await loadTarget(options.configPath, options.targetName);
+  const deps = resolveDeps(options.deps);
+  const checks = selectChecks(loaded, options.names ?? []);
+
+  return runChecks(loaded, checks, deps, options.logger);
 }
 
 /** Put the function back to its snapshot from before the first deploy, then delete the snapshot. */
@@ -225,6 +265,10 @@ export async function invokeTarget(options: InvokeOptions): Promise<InvokeResult
   const result = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
   logStep(options.logger, loaded.targetName, "invoke", formatInvokeSummary(result));
 
+  if (options.expect !== false) {
+    assertInvokeExpectation(loaded, result, options.logger);
+  }
+
   return result;
 }
 
@@ -244,19 +288,27 @@ export async function resolvePayload(
     return parseJson(payloadJson);
   }
 
-  const configuredPayload = loaded.target.invoke.payloadJson;
+  return readConfiguredPayload(
+    loaded,
+    loaded.target.invoke.payloadJson,
+    payloadFile ?? loaded.target.invoke.payloadFile,
+  );
+}
 
-  if (configuredPayload !== undefined) {
-    return configuredPayload;
+async function readConfiguredPayload(
+  loaded: LoadedTarget,
+  payloadJson: JsonValue | undefined,
+  payloadFile: string | undefined,
+): Promise<JsonValue | undefined> {
+  if (payloadJson !== undefined) {
+    return payloadJson;
   }
 
-  const file = payloadFile ?? loaded.target.invoke.payloadFile;
-
-  if (!file) {
+  if (!payloadFile) {
     return undefined;
   }
 
-  const raw = await readFile(path.resolve(loaded.projectRoot, file), "utf8");
+  const raw = await readFile(path.resolve(loaded.projectRoot, payloadFile), "utf8");
 
   return parseJson(raw);
 }
@@ -298,6 +350,101 @@ async function runBuild(
   );
 
   return build;
+}
+
+interface NamedCheck {
+  name: string;
+  check: CheckConfig;
+}
+
+/** Look up checks by name, all of them when no names are given. Unknown names fail validation. */
+function selectChecks(loaded: LoadedTarget, names: string[]): NamedCheck[] {
+  const configured = loaded.target.checks;
+  const available = Object.keys(configured);
+
+  if (available.length === 0) {
+    throw new LambdaDevError("validation", `Target ${loaded.targetName} has no checks`, {
+      hint: "Add a checks section to the target in lambda-dev.yml.",
+    });
+  }
+
+  const selected = names.length > 0 ? names : available;
+
+  return selected.map((name) => {
+    const check = configured[name];
+
+    if (!check) {
+      throw new LambdaDevError(
+        "validation",
+        `Unknown check "${name}". Available checks: ${available.join(", ")}`,
+      );
+    }
+
+    return { name, check };
+  });
+}
+
+/** Run every check, then fail if any of them didn't get the expected response. */
+async function runChecks(
+  loaded: LoadedTarget,
+  checks: NamedCheck[],
+  deps: RuntimeDeps,
+  logger: Logger,
+): Promise<CheckResult[]> {
+  const results: CheckResult[] = [];
+
+  for (const { name, check } of checks) {
+    const payload = await readConfiguredPayload(loaded, check.payloadJson, check.payloadFile);
+    const invoke = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
+    const mismatches = findMismatches(check.expect, invoke);
+
+    if (mismatches.length === 0) {
+      logStep(
+        logger,
+        loaded.targetName,
+        "check",
+        `${name} passed (${formatInvokeSummary(invoke)})`,
+      );
+    } else {
+      logStep(logger, loaded.targetName, "check", `${name} failed: ${mismatches.join("; ")}`);
+    }
+
+    results.push({ name, invoke, mismatches });
+  }
+
+  const failed = results.filter((result) => result.mismatches.length > 0);
+
+  if (failed.length > 0) {
+    throw new LambdaDevError(
+      "aws_invoke",
+      `${failed.length} of ${results.length} checks failed for ${loaded.target.functionName}: ${failed.map((result) => result.name).join(", ")}`,
+      { hint: "Each check's mismatches are logged above. Nothing was rolled back." },
+    );
+  }
+
+  return results;
+}
+
+function assertInvokeExpectation(loaded: LoadedTarget, invoke: InvokeResult, logger: Logger): void {
+  const expectation: Expectation | undefined = loaded.target.invoke.expect;
+
+  if (!expectation) {
+    return;
+  }
+
+  const mismatches = findMismatches(expectation, invoke);
+
+  if (mismatches.length === 0) {
+    logStep(logger, loaded.targetName, "invoke", "Response matches invoke.expect");
+
+    return;
+  }
+
+  throw new LambdaDevError(
+    "aws_invoke",
+    `${loaded.target.functionName} didn't respond as invoke.expect describes: ${mismatches.join("; ")}`,
+    { hint: "Pass --no-expect to invoke without checking the response." },
+  );
 }
 
 async function ensureSnapshot(

@@ -42,6 +42,15 @@ targets:
     invoke:
       afterDeploy: true
       payloadFile: events/dev.json
+      # Fail invoke, deploy, and watch when the response doesn't match:
+      # expect:
+      #   payload: { statusCode: 200 }
+    # Named checks for deployment validation: `check dev` or `deploy dev --check`.
+    # checks:
+    #   health:
+    #     payloadJson: { rawPath: /health }
+    #     expect:
+    #       payload: { statusCode: 200 }
 
   # Reuse the dev build configuration and override individual options.
   # Targets with identical build options and inputs share one cached build.

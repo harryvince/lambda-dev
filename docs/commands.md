@@ -39,10 +39,10 @@ Builds the target's zip into `build.outDir` without deploying it. Doesn't call A
 ## `deploy`
 
 ```bash
-aws-lambda-dev deploy [target] [-c lambda-dev.yml] [--invoke] [--payload-file <path>] [--payload-json <json>] [--no-cache]
+aws-lambda-dev deploy [target] [-c lambda-dev.yml] [--invoke] [--payload-file <path>] [--payload-json <json>] [--no-cache] [--no-expect] [--check]
 ```
 
-Runs one cycle: build, sync environment variables (if configured), upload, and optionally invoke.
+Runs one cycle: build, sync environment variables (if configured), upload, optionally invoke, and optionally run [checks](checks.md).
 
 | Option | Description |
 | --- | --- |
@@ -50,16 +50,26 @@ Runs one cycle: build, sync environment variables (if configured), upload, and o
 | `--payload-file <path>` | JSON file to send when invoking. Relative to the config file's directory. |
 | `--payload-json <json>` | Inline JSON to send when invoking. |
 | `--no-cache` | Build from scratch even if the [build cache](configuration.md#build-cache) has a match. |
+| `--no-expect` | Don't compare the invoke response with [`invoke.expect`](checks.md#checking-every-invoke). |
+| `--check` | After uploading (and invoking), run all of the target's [checks](checks.md). Fails before building if the target has none. |
 
 If `invoke.afterDeploy` is `true` in the config, `deploy` always invokes; there's no flag to skip it for a single run.
 
 ## `invoke`
 
 ```bash
-aws-lambda-dev invoke [target] [-c lambda-dev.yml] [--payload-file <path>] [--payload-json <json>]
+aws-lambda-dev invoke [target] [-c lambda-dev.yml] [--payload-file <path>] [--payload-json <json>] [--no-expect]
 ```
 
-Invokes the function as it is now, without building or uploading. Environment variables aren't synced.
+Invokes the function as it is now, without building or uploading. Environment variables aren't synced. If [`invoke.expect`](checks.md#checking-every-invoke) is set, a response that doesn't match fails the command; `--no-expect` skips that.
+
+## `check`
+
+```bash
+aws-lambda-dev check [target] [checks...] [-c lambda-dev.yml]
+```
+
+Invokes the function as it is now with each of the target's [checks](checks.md) and compares the responses with what they expect. Runs every check by default, or only the ones named. Every selected check runs; the command then fails if any didn't match. Doesn't build or upload.
 
 ## `rollback`
 

@@ -102,6 +102,44 @@ const watchSchema = z
   })
   .meta({ description: "File watching for the watch command." });
 
+const expectSchema = z
+  .object({
+    statusCode: z.number().int().optional().meta({
+      description: "Lambda's invoke status code, normally 200. Not the statusCode in your payload.",
+    }),
+    functionError: z.boolean().default(false).meta({
+      description:
+        "Whether the function should fail with an unhandled error (FunctionError). Default false.",
+    }),
+    payload: jsonValueSchema.optional().meta({
+      description:
+        "Expected response. Objects match if every listed key matches, so other keys are ignored; arrays and other values must be equal.",
+    }),
+    exact: z.boolean().default(false).meta({
+      description: "Require the payload to equal the expected one exactly, with no extra keys.",
+    }),
+  })
+  .strict()
+  .meta({ description: "What a successful response looks like. The command fails otherwise." });
+
+export type Expectation = z.infer<typeof expectSchema>;
+
+const checkSchema = z
+  .object({
+    payloadFile: z
+      .string()
+      .optional()
+      .meta({ description: "JSON event file, relative to the config file." }),
+    payloadJson: jsonValueSchema
+      .optional()
+      .meta({ description: "Inline event. Takes priority over payloadFile." }),
+    expect: expectSchema,
+  })
+  .strict()
+  .meta({ description: "An invocation with a known event and an expected response." });
+
+export type CheckConfig = z.infer<typeof checkSchema>;
+
 const invokeSchema = z
   .object({
     afterDeploy: z
@@ -119,6 +157,7 @@ const invokeSchema = z
       .enum(["None", "Tail"])
       .default("Tail")
       .meta({ description: "Tail requests the last 4 KB of logs with the response." }),
+    expect: expectSchema.optional(),
   })
   .strict()
   .default({
@@ -148,6 +187,21 @@ const targetSchema = z
     build: buildSchema,
     watch: watchSchema,
     invoke: invokeSchema,
+    checks: z
+      .record(
+        z
+          .string()
+          .regex(
+            /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
+            "Use letters, digits, dots, dashes, or underscores",
+          ),
+        checkSchema,
+      )
+      .default({})
+      .meta({
+        description:
+          "Named checks, such as a health check, run by the check command and deploy --check.",
+      }),
   })
   .strict()
   .meta({ description: "One Lambda function to build and deploy." });

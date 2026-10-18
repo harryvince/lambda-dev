@@ -11,7 +11,7 @@ import {
 } from "@aws-sdk/client-lambda";
 import AdmZip from "adm-zip";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { deployTarget, invokeTarget, rollbackTarget } from "../../src/core.js";
+import { checkTarget, deployTarget, invokeTarget, rollbackTarget } from "../../src/core.js";
 import { readSnapshot } from "../../src/snapshot.js";
 import { validateTarget } from "../../src/core.js";
 
@@ -78,6 +78,14 @@ targets:
       target: node22
     invoke:
       payloadJson: { name: e2e }
+    checks:
+      dev-code:
+        payloadJson: { name: check }
+        expect:
+          payload: { version: dev, name: check }
+      original-code:
+        expect:
+          payload: { version: original }
 `,
   );
 });
@@ -117,6 +125,20 @@ describe("against a local Lambda emulator", () => {
     expect(snapshot?.environment).toEqual({ KEEP: "kept", FLAG: "original" });
   });
 
+  it("passes checks that match the deployed code and fails the rest", async () => {
+    const [result] = await checkTarget({
+      configPath,
+      names: ["dev-code"],
+      logger: memoryLogger(),
+    });
+
+    expect(result?.mismatches).toEqual([]);
+
+    await expect(
+      checkTarget({ configPath, names: ["original-code"], logger: memoryLogger() }),
+    ).rejects.toMatchObject({ category: "aws_invoke" });
+  });
+
   it("rolls back the code and environment, then deletes the snapshot", async () => {
     const summary = await rollbackTarget({ configPath, logger: memoryLogger() });
 
@@ -126,6 +148,7 @@ describe("against a local Lambda emulator", () => {
     const invoked = await invokeTarget({ configPath, logger: memoryLogger() });
     expect(invoked.payload).toEqual({ version: "original", flag: "original", keep: "kept" });
     expect(await readSnapshot(await validateTarget(configPath))).toBeUndefined();
+    await checkTarget({ configPath, names: ["original-code"], logger: memoryLogger() });
   });
 });
 

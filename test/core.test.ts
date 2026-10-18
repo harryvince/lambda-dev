@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildTarget,
+  checkTarget,
   deployTarget,
   formatInvokeSummary,
   invokeTarget,
@@ -513,6 +514,29 @@ describe("rollback snapshots", () => {
   });
 });
 
+async function checksConfig(): Promise<string> {
+  const file = await writeProjectConfig(false);
+  await writeFile(
+    path.join(path.dirname(file), "health.json"),
+    JSON.stringify({ path: "/health" }),
+  );
+  await writeFile(
+    file,
+    `${await readFile(file, "utf8")}    checks:
+      health:
+        payloadFile: health.json
+        expect:
+          payload: { ok: true }
+      validation:
+        payloadJson: { bad: true }
+        expect:
+          payload: { statusCode: 400 }
+`,
+  );
+
+  return file;
+}
+
 describe("build command", () => {
   it("builds without calling AWS and honours --no-cache", async () => {
     const configPath = await writeProjectConfig(true);
@@ -531,5 +555,137 @@ describe("build command", () => {
     expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
     expect(lambda.downloadFunction).not.toHaveBeenCalled();
     expect(lambda.invokeFunction).not.toHaveBeenCalled();
+  });
+});
+
+describe("checks", () => {
+  it("runs every check with its own payload and reports the results", async () => {
+    const configPath = await checksConfig();
+    const lambda = fakeLambda();
+    lambda.invokeFunction = vi
+      .fn()
+      .mockResolvedValueOnce({ statusCode: 200, payload: { ok: true, version: "1" } })
+      .mockResolvedValueOnce({ statusCode: 200, payload: { statusCode: 400 } });
+    const logger = memoryLogger();
+
+    const results = await checkTarget({ configPath, logger, deps: { lambda } });
+
+    expect(results.map((result) => [result.name, result.mismatches])).toEqual([
+      ["health", []],
+      ["validation", []],
+    ]);
+    expect(vi.mocked(lambda.invokeFunction).mock.calls.map((call) => call[1])).toEqual([
+      { path: "/health" },
+      { bad: true },
+    ]);
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("[dev] check: health passed"));
+  });
+
+  it("runs the remaining checks after a failure, then fails", async () => {
+    const configPath = await checksConfig();
+    const lambda = fakeLambda();
+    lambda.invokeFunction = vi
+      .fn()
+      .mockResolvedValueOnce({ statusCode: 200, payload: { ok: false } })
+      .mockResolvedValueOnce({ statusCode: 200, payload: { statusCode: 400 } });
+    const logger = memoryLogger();
+
+    await expect(checkTarget({ configPath, logger, deps: { lambda } })).rejects.toMatchObject({
+      category: "aws_invoke",
+      message: expect.stringContaining("1 of 2 checks failed for dev-function: health"),
+    });
+    expect(lambda.invokeFunction).toHaveBeenCalledTimes(2);
+    expect(logger.info).toHaveBeenCalledWith(
+      "[dev] check: health failed: payload.ok: expected true, received false",
+    );
+  });
+
+  it("runs only the named checks and rejects unknown names before invoking", async () => {
+    const configPath = await checksConfig();
+    const lambda = fakeLambda();
+
+    await checkTarget({ configPath, names: ["health"], logger: memoryLogger(), deps: { lambda } });
+    expect(lambda.invokeFunction).toHaveBeenCalledOnce();
+
+    await expect(
+      checkTarget({ configPath, names: ["nope"], logger: memoryLogger(), deps: { lambda } }),
+    ).rejects.toMatchObject({ category: "validation" });
+    expect(lambda.invokeFunction).toHaveBeenCalledOnce();
+  });
+
+  it("deploy --check runs the checks after the upload, and fails before building without checks", async () => {
+    const lambda = fakeLambda();
+    const buildArtifact = vi.fn().mockResolvedValue(built());
+    lambda.invokeFunction = vi
+      .fn()
+      .mockResolvedValueOnce({ statusCode: 200, payload: { ok: true } })
+      .mockResolvedValueOnce({ statusCode: 200, payload: { statusCode: 400 } });
+
+    const summary = await deployTarget({
+      configPath: await checksConfig(),
+      check: true,
+      logger: memoryLogger(),
+      deps: { buildArtifact, lambda },
+    });
+
+    expect(summary.checks?.map((result) => result.name)).toEqual(["health", "validation"]);
+    expect(vi.mocked(lambda.updateFunctionCode).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(lambda.invokeFunction).mock.invocationCallOrder[0]!,
+    );
+
+    const noChecks = vi.fn();
+    await expect(
+      deployTarget({
+        configPath: await writeProjectConfig(false),
+        check: true,
+        logger: memoryLogger(),
+        deps: { buildArtifact: noChecks, lambda: fakeLambda() },
+      }),
+    ).rejects.toMatchObject({ category: "validation" });
+    expect(noChecks).not.toHaveBeenCalled();
+  });
+});
+
+describe("invoke.expect", () => {
+  async function expectConfig(): Promise<string> {
+    const file = await writeProjectConfig(true);
+    await writeFile(
+      file,
+      `${await readFile(file, "utf8")}      expect:
+        payload: { ok: true }
+`,
+    );
+
+    return file;
+  }
+
+  it("fails invoke when the response doesn't match, unless --no-expect", async () => {
+    const configPath = await expectConfig();
+    const lambda = fakeLambda();
+    lambda.invokeFunction = vi.fn().mockResolvedValue({ statusCode: 200, payload: { ok: false } });
+
+    await expect(
+      invokeTarget({ configPath, logger: memoryLogger(), deps: { lambda } }),
+    ).rejects.toMatchObject({
+      category: "aws_invoke",
+      message: expect.stringContaining("payload.ok: expected true, received false"),
+    });
+
+    await expect(
+      invokeTarget({ configPath, expect: false, logger: memoryLogger(), deps: { lambda } }),
+    ).resolves.toMatchObject({ statusCode: 200 });
+  });
+
+  it("checks the after-deploy invoke too", async () => {
+    const configPath = await expectConfig();
+    const logger = memoryLogger();
+
+    await deployTarget({
+      configPath,
+      logger,
+      deps: { buildArtifact: vi.fn().mockResolvedValue(built()), lambda: fakeLambda() },
+    });
+
+    expect(logger.info).toHaveBeenCalledWith("[dev] invoke: Response matches invoke.expect");
   });
 });

@@ -88,6 +88,7 @@ async function target(functionName: string): Promise<LoadedTarget> {
       },
       watch: { include: [], exclude: [], debounceMs: 300 },
       invoke: { afterDeploy: false, logType: "Tail" },
+      checks: {},
     },
   };
 }

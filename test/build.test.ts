@@ -39,6 +39,7 @@ describe("buildArtifact", () => {
         },
         watch: { include: ["*.ts"], exclude: [], debounceMs: 300 },
         invoke: { afterDeploy: false, logType: "Tail" },
+        checks: {},
       },
     } satisfies LoadedTarget);
 
