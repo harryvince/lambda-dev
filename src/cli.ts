@@ -46,11 +46,13 @@ export function createProgram(): Command {
     .option("--invoke", "Invoke after upload")
     .option("--payload-file <path>", "Invoke payload JSON file")
     .option("--payload-json <json>", "Invoke payload JSON string")
+    .option("--no-cache", "Rebuild even if a cached build matches")
     .action(async (target, options) => {
       await deployTarget({
         configPath: options.config,
         targetName: target,
         invoke: options.invoke,
+        cache: options.cache,
         payloadFile: options.payloadFile,
         payloadJson: options.payloadJson,
         logger: consoleLogger,

@@ -43,7 +43,8 @@ targets:
       afterDeploy: true
       payloadFile: events/dev.json
 
-  # Reuse the dev build configuration and override individual options:
+  # Reuse the dev build configuration and override individual options.
+  # Targets with identical build options and inputs share one cached build.
   # staging:
   #   functionName: my-existing-lambda-staging
   #   region: eu-west-2

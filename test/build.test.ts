@@ -34,6 +34,7 @@ describe("buildArtifact", () => {
           external: [],
           define: {},
           copy: [],
+          cache: false,
           outDir: ".lambda-dev/dev",
         },
         watch: { include: ["*.ts"], exclude: [], debounceMs: 300 },

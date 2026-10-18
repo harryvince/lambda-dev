@@ -112,10 +112,27 @@ Options passed to esbuild. The output is always a single `index.js` (plus `index
 | `external` | `[]` | Packages to leave out of the bundle, e.g. `"@aws-sdk/*"`. |
 | `define` | `{}` | esbuild `define` replacements. Values are code, so strings need inner quotes: `'"dev"'`. |
 | `copy` | `[]` | Extra files to put in the zip. See [Copying files](copying-files.md). |
-| `outDir` | `.lambda-dev/<target>` | Build output directory. It's deleted and recreated on every build, so it can't contain `.lambda-dev/snapshots`. |
+| `cache` | `true` | Reuse the zip from an earlier build with the same options and unchanged inputs. See [Build cache](#build-cache). |
+| `outDir` | `.lambda-dev/<target>` | Build output directory. It's deleted and recreated on every build, so it can't contain `.lambda-dev/snapshots` or `.lambda-dev/build-cache`. |
 
 !!! warning "`format: esm`"
     The zip doesn't include a `package.json`, so whether Lambda treats `index.js` as an ES module depends on the Node.js runtime. `cjs` is the safe default. If you need `esm`, [copy](copying-files.md) in a `package.json` with `"type": "module"`.
+
+### Build cache
+
+Every build is saved in `.lambda-dev/build-cache/`. Before building, the CLI looks for an earlier build, by this target or any other, with:
+
+- the same `build` options (everything except `outDir` and `cache`) and the same `copy` layout;
+- the same contents in every file esbuild bundled and every file copied;
+- the same `package.json`, `tsconfig.json`, `jsconfig.json`, and lockfiles in the config's directory and each directory above it;
+- the same esbuild version.
+
+If one matches, its zip is reused and the output directory is recreated from it, and the log says `Reused cached build`. So deploying the same code to `dev`, `staging`, and `prod` builds once and uploads byte-identical zips, which also gives each function the same `CodeSha256`. Targets that differ in any build option, such as a per-stage `define`, are built separately.
+
+The cache keeps the 20 most recently written builds. Set `cache: false` on a target, or pass `--no-cache` to `deploy`, to always rebuild. Deleting `.lambda-dev/build-cache/` is always safe.
+
+!!! note
+    The cache tracks file contents, not which files exist. A new file that changes how an import resolves without changing any tracked file (say, adding `src/util.ts` next to an existing `src/util/index.ts`) isn't noticed. Deploy with `--no-cache` after a change like that.
 
 ## `watch`
 

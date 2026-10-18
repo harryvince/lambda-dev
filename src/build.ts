@@ -1,7 +1,13 @@
-import { chmod, copyFile, mkdir, readFile, rm, stat } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import AdmZip from "adm-zip";
 import { build as esbuild } from "esbuild";
+import {
+  assertOutDirKeepsBuildCache,
+  computeBuildCacheKey,
+  readBuildCache,
+  writeBuildCache,
+} from "./cache.js";
 import { toLambdaDevError } from "./errors.js";
 import type { LoadedTarget } from "./config.js";
 import { createCopyManifest } from "./copy.js";
@@ -11,6 +17,8 @@ export interface BuildResult {
   artifactBytes: Uint8Array;
   sizeBytes: number;
   durationMs: number;
+  /** True when the zip came from the build cache instead of a fresh build. */
+  cached: boolean;
 }
 
 export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> {
@@ -21,10 +29,36 @@ export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> 
 
   try {
     const assets = await createCopyManifest(loaded);
+    let cacheKey: string | undefined;
+
+    if (loaded.target.build.cache) {
+      assertOutDirKeepsBuildCache(loaded);
+      cacheKey = await computeBuildCacheKey(loaded, assets);
+    }
+
+    const cachedArtifact = cacheKey
+      ? await readBuildCache(loaded.projectRoot, cacheKey)
+      : undefined;
+
     await rm(outDir, { recursive: true, force: true });
     await mkdir(outDir, { recursive: true });
 
-    await esbuild({
+    if (cachedArtifact) {
+      await extractArtifact(cachedArtifact, outDir);
+      await writeFile(artifactPath, cachedArtifact);
+
+      return {
+        artifactPath,
+        artifactBytes: cachedArtifact,
+        sizeBytes: cachedArtifact.byteLength,
+        durationMs: Date.now() - started,
+        cached: true,
+      };
+    }
+
+    const { metafile } = await esbuild({
+      absWorkingDir: loaded.projectRoot,
+      metafile: true,
       entryPoints: [path.resolve(loaded.projectRoot, loaded.target.build.entry)],
       bundle: loaded.target.build.bundle,
       platform: loaded.target.build.platform,
@@ -68,14 +102,55 @@ export async function buildArtifact(loaded: LoadedTarget): Promise<BuildResult> 
     zip.writeZip(artifactPath);
     const artifactBytes = await readFile(artifactPath);
 
+    if (cacheKey) {
+      const inputs = [
+        ...Object.keys(metafile.inputs).map((input) => path.resolve(loaded.projectRoot, input)),
+        ...assets.filter((asset) => !asset.directory).map((asset) => asset.source),
+      ];
+
+      await writeBuildCache(loaded.projectRoot, cacheKey, artifactBytes, inputs);
+    }
+
     return {
       artifactPath,
       artifactBytes,
       sizeBytes: artifactBytes.byteLength,
       durationMs: Date.now() - started,
+      cached: false,
     };
   } catch (error) {
     throw toLambdaDevError("build", `Build failed for target ${loaded.targetName}`, error);
+  }
+}
+
+/** Recreate the build output from a cached zip, so outDir looks the same as after a fresh build. */
+async function extractArtifact(artifact: Uint8Array, outDir: string): Promise<void> {
+  const directories: { destination: string; mode: number }[] = [];
+
+  for (const entry of new AdmZip(Buffer.from(artifact)).getEntries()) {
+    const destination = path.resolve(outDir, entry.entryName);
+    const relative = path.relative(outDir, destination);
+
+    if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error(`Cached artifact has an unsafe entry ${entry.entryName}`);
+    }
+
+    const mode = (entry.attr >>> 16) & 0o777;
+
+    if (entry.isDirectory) {
+      await mkdir(destination, { recursive: true });
+      directories.push({ destination, mode });
+    } else {
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, entry.getData());
+
+      if (mode !== 0) await chmod(destination, mode);
+    }
+  }
+
+  // As in a fresh build, directory modes go on last so read-only directories can be filled.
+  for (const directory of directories.reverse()) {
+    if (directory.mode !== 0) await chmod(directory.destination, directory.mode);
   }
 }
 

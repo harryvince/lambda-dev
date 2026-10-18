@@ -121,6 +121,7 @@ function loadedTarget(): LoadedTarget {
         external: [],
         define: {},
         copy: [],
+        cache: false,
         outDir: ".lambda-dev/dev",
       },
       watch: { include: ["src/**/*.ts"], exclude: [], debounceMs: 300 },

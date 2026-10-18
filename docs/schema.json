@@ -176,6 +176,11 @@
                   "additionalProperties": false
                 }
               },
+              "cache": {
+                "default": true,
+                "description": "Reuse the zip from an earlier build, by any target, with the same options and unchanged input files.",
+                "type": "boolean"
+              },
               "outDir": {
                 "description": "Build output directory. Defaults to .lambda-dev/<target>. Cleared on every build.",
                 "type": "string"

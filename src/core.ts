@@ -32,6 +32,8 @@ export interface DeployOptions {
   invoke?: boolean;
   payloadFile?: string;
   payloadJson?: string;
+  /** false skips the build cache for this deploy, whatever build.cache says. */
+  cache?: boolean;
   logger: Logger;
   deps?: Partial<RuntimeDeps>;
 }
@@ -70,6 +72,10 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
   const loaded = await loadTarget(options.configPath, options.targetName);
   const deps = resolveDeps(options.deps);
 
+  if (options.cache === false) {
+    loaded.target.build.cache = false;
+  }
+
   if (loaded.target.snapshot) {
     assertOutDirKeepsSnapshots(loaded);
   }
@@ -80,7 +86,7 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     options.logger,
     loaded.targetName,
     "build",
-    `Created ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`,
+    `${build.cached ? "Reused cached build for" : "Created"} ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`,
   );
 
   if (loaded.target.snapshot) {

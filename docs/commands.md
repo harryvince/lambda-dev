@@ -27,7 +27,7 @@ Parses the config and resolves the target. Doesn't build or call AWS, so it's sa
 ## `deploy`
 
 ```bash
-aws-lambda-dev deploy [target] [-c lambda-dev.yml] [--invoke] [--payload-file <path>] [--payload-json <json>]
+aws-lambda-dev deploy [target] [-c lambda-dev.yml] [--invoke] [--payload-file <path>] [--payload-json <json>] [--no-cache]
 ```
 
 Runs one cycle: build, sync environment variables (if configured), upload, and optionally invoke.
@@ -37,6 +37,7 @@ Runs one cycle: build, sync environment variables (if configured), upload, and o
 | `--invoke` | Invoke after uploading, even if `invoke.afterDeploy` is `false`. |
 | `--payload-file <path>` | JSON file to send when invoking. Relative to the config file's directory. |
 | `--payload-json <json>` | Inline JSON to send when invoking. |
+| `--no-cache` | Build from scratch even if the [build cache](configuration.md#build-cache) has a match. |
 
 If `invoke.afterDeploy` is `true` in the config, `deploy` always invokes; there's no flag to skip it for a single run.
 

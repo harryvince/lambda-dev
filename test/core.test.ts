@@ -22,6 +22,7 @@ describe("core use cases", () => {
       artifactBytes: new Uint8Array([1]),
       sizeBytes: 1,
       durationMs: 5,
+      cached: false,
     });
 
     const lambda = fakeLambda();
@@ -40,6 +41,33 @@ describe("core use cases", () => {
     expect(result.invoke?.statusCode).toBe(200);
   });
 
+  it("turns the build cache off for one deploy with cache: false", async () => {
+    const configPath = await writeProjectConfig(false);
+    const logger = memoryLogger();
+
+    const buildArtifact = vi.fn().mockResolvedValue({
+      artifactPath: "/tmp/function.zip",
+      artifactBytes: new Uint8Array([1]),
+      sizeBytes: 1,
+      durationMs: 5,
+      cached: true,
+    });
+
+    await deployTarget({ configPath, logger, deps: { buildArtifact, lambda: fakeLambda() } });
+    expect(buildArtifact.mock.calls[0]?.[0].target.build.cache).toBe(true);
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining("Reused cached build for /tmp/function.zip"),
+    );
+
+    await deployTarget({
+      configPath,
+      cache: false,
+      logger,
+      deps: { buildArtifact, lambda: fakeLambda() },
+    });
+    expect(buildArtifact.mock.calls[1]?.[0].target.build.cache).toBe(false);
+  });
+
   it("skips invoke after deploy unless requested or configured", async () => {
     const configPath = await writeProjectConfig(false);
     const lambda = fakeLambda();
@@ -53,6 +81,7 @@ describe("core use cases", () => {
           artifactBytes: new Uint8Array([1]),
           sizeBytes: 1,
           durationMs: 5,
+          cached: false,
         }),
         lambda,
       },
@@ -170,6 +199,7 @@ const built = () => ({
   artifactBytes: new Uint8Array([1]),
   sizeBytes: 1,
   durationMs: 1,
+  cached: false,
 });
 
 describe("environment deployment orchestration", () => {

@@ -129,6 +129,7 @@ targets:
       artifactBytes: new Uint8Array([1]),
       sizeBytes: 1,
       durationMs: 1,
+      cached: false,
     });
 
     const lambda: LambdaAdapter = {

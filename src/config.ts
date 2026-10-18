@@ -66,6 +66,10 @@ const buildSchema = z
       )
       .default([])
       .meta({ description: "Extra files to copy into the build output and zip." }),
+    cache: z.boolean().default(true).meta({
+      description:
+        "Reuse the zip from an earlier build, by any target, with the same options and unchanged input files.",
+    }),
     outDir: z.string().optional().meta({
       description:
         "Build output directory. Defaults to .lambda-dev/<target>. Cleared on every build.",

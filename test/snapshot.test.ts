@@ -83,6 +83,7 @@ async function target(functionName: string): Promise<LoadedTarget> {
         external: [],
         define: {},
         copy: [],
+        cache: false,
         outDir: ".lambda-dev/dev",
       },
       watch: { include: [], exclude: [], debounceMs: 300 },
