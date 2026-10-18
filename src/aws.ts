@@ -32,7 +32,7 @@ const lambdaEnvironmentSchema = z
 const lambdaEnvironmentVariablesSchema = z.record(z.string(), z.string()).optional();
 
 // Lambda's limit for a zip uploaded directly with UpdateFunctionCode, rather than through S3.
-const MAX_DIRECT_UPLOAD_BYTES = 50 * 1024 * 1024;
+export const MAX_DIRECT_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export interface DeployResult {
   functionName: string;
@@ -59,7 +59,12 @@ export interface LambdaAdapter {
   /** Read the function's current code and environment, for a rollback snapshot. */
   downloadFunction(loaded: LoadedTarget): Promise<FunctionState>;
   waitForUpdate(loaded: LoadedTarget): Promise<void>;
-  updateFunctionCode(loaded: LoadedTarget, artifactBytes: Uint8Array): Promise<DeployResult>;
+  /** With a revisionId, the upload fails instead of overwriting a function that changed since. */
+  updateFunctionCode(
+    loaded: LoadedTarget,
+    artifactBytes: Uint8Array,
+    revisionId?: string,
+  ): Promise<DeployResult>;
   invokeFunction(
     loaded: LoadedTarget,
     payload: JsonValue | undefined,
@@ -188,7 +193,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
       const existing = this.environmentVariables(configuration);
       const { variables, result } = plan(existing);
 
-      if (!result.changed) return result;
+      if (!result.changed) return { ...result, revisionId: configuration.RevisionId };
 
       if (!configuration.RevisionId) {
         throw new LambdaDevError("aws_configuration", "Lambda configuration revision is missing", {
@@ -209,7 +214,8 @@ export class AwsLambdaAdapter implements LambdaAdapter {
       this.assertReady(updated, true);
       this.environmentVariables(updated);
 
-      return result;
+      // Read after the wait: the revision changes again when the update completes.
+      return { ...result, revisionId: updated.RevisionId };
     } catch (error) {
       if (error instanceof LambdaDevError) throw error;
       throw withCredentialsHint(environmentAwsError(error, failure), error, loaded.target.profile);
@@ -311,7 +317,11 @@ export class AwsLambdaAdapter implements LambdaAdapter {
     }
   }
 
-  async updateFunctionCode(loaded: LoadedTarget, artifactBytes: Uint8Array): Promise<DeployResult> {
+  async updateFunctionCode(
+    loaded: LoadedTarget,
+    artifactBytes: Uint8Array,
+    revisionId?: string,
+  ): Promise<DeployResult> {
     const client = this.clientFactory(loaded.target);
 
     try {
@@ -319,6 +329,7 @@ export class AwsLambdaAdapter implements LambdaAdapter {
         new UpdateFunctionCodeCommand({
           FunctionName: loaded.target.functionName,
           ZipFile: artifactBytes,
+          RevisionId: revisionId,
         }),
       );
 
@@ -328,6 +339,17 @@ export class AwsLambdaAdapter implements LambdaAdapter {
         requestId: result.$metadata.requestId,
       };
     } catch (error) {
+      if (error instanceof Error && error.name === "PreconditionFailedException") {
+        throw new LambdaDevError(
+          "aws_deploy",
+          `${loaded.target.functionName} changed while this deploy was running, so the code wasn't uploaded (PreconditionFailedException)`,
+          {
+            cause: error,
+            hint: "Someone else may be deploying to the same function. The environment changes were applied. Check the function, then rerun.",
+          },
+        );
+      }
+
       if (hasEnvironmentPatch(loaded.target.environment)) {
         throw withCredentialsHint(
           environmentAwsError(

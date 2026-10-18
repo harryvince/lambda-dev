@@ -3,13 +3,15 @@ import path from "node:path";
 import { buildArtifact, type BuildResult } from "./build.js";
 import {
   AwsLambdaAdapter,
+  MAX_DIRECT_UPLOAD_BYTES,
   type InvokeResult,
   type LambdaAdapter,
   type DeployResult,
 } from "./aws.js";
 import { loadTarget, type CheckConfig, type Expectation, type LoadedTarget } from "./config.js";
 import { findMismatches } from "./expect.js";
-import { logStep, previewPayload, type Logger } from "./output.js";
+import { logStep, previewPayload, warnStep, type Logger } from "./output.js";
+import { confirmInTerminal, type Confirm } from "./confirm.js";
 import { hasEnvironmentPatch, type EnvironmentUpdateResult } from "./environment.js";
 import { parseJson, type JsonValue } from "./json.js";
 import {
@@ -25,7 +27,12 @@ import { LambdaDevError } from "./errors.js";
 export interface RuntimeDeps {
   buildArtifact: (loaded: LoadedTarget) => Promise<BuildResult>;
   lambda: LambdaAdapter;
+  /** Asks before changing a protected target. */
+  confirm: Confirm;
 }
+
+// Warn once a zip passes this share of Lambda's direct upload limit.
+const UPLOAD_WARNING_RATIO = 0.8;
 
 export interface DeployOptions {
   configPath?: string;
@@ -39,6 +46,10 @@ export interface DeployOptions {
   expect?: boolean;
   /** Run every configured check after the upload. */
   check?: boolean;
+  /** Deploy a protected target without asking. */
+  yes?: boolean;
+  /** Set by watch: a protected target is refused instead of confirmed. */
+  fromWatch?: boolean;
   logger: Logger;
   deps?: Partial<RuntimeDeps>;
 }
@@ -82,6 +93,8 @@ export interface InvokeOptions {
 export interface RollbackOptions {
   configPath?: string;
   targetName?: string;
+  /** Roll back a protected target without asking. */
+  yes?: boolean;
   logger: Logger;
   deps?: Partial<RuntimeDeps>;
 }
@@ -127,7 +140,23 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
 
   // Fail on a check-less target before building, like any other config problem.
   const checks = options.check ? selectChecks(loaded, []) : [];
+
+  if (options.fromWatch && loaded.target.protected) {
+    throw protectedWatchError(loaded);
+  }
+
+  await confirmProtectedChange(loaded, "deploy", options.yes, deps);
   const build = await runBuild(loaded, deps, options.logger);
+
+  if (build.sizeBytes > MAX_DIRECT_UPLOAD_BYTES) {
+    throw new LambdaDevError(
+      "build",
+      `${build.artifactPath} is ${formatMegabytes(build.sizeBytes)}, over Lambda's ${formatMegabytes(MAX_DIRECT_UPLOAD_BYTES)} limit for direct uploads`,
+      {
+        hint: "Leave large dependencies out with build.external (the Node.js runtime includes @aws-sdk/*), turn on build.minify, or move large files to a layer. Nothing was changed in AWS.",
+      },
+    );
+  }
 
   if (loaded.target.snapshot) {
     await ensureSnapshot(loaded, deps, options.logger);
@@ -159,7 +188,12 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     "deploy",
     `Uploading to ${loaded.target.functionName}`,
   );
-  const deploy = await deps.lambda.updateFunctionCode(loaded, build.artifactBytes);
+
+  const deploy = await deps.lambda.updateFunctionCode(
+    loaded,
+    build.artifactBytes,
+    environment?.revisionId,
+  );
 
   if (environment) {
     logStep(options.logger, loaded.targetName, "deploy", "Waiting for code update completion");
@@ -225,6 +259,7 @@ export async function rollbackTarget(options: RollbackOptions): Promise<Rollback
     );
   }
 
+  await confirmProtectedChange(loaded, "rollback", options.yes, deps);
   logStep(
     options.logger,
     loaded.targetName,
@@ -243,7 +278,13 @@ export async function rollbackTarget(options: RollbackOptions): Promise<Rollback
   );
 
   logStep(options.logger, loaded.targetName, "rollback", "Uploading the original code");
-  const deploy = await deps.lambda.updateFunctionCode(loaded, snapshot.code);
+
+  const deploy = await deps.lambda.updateFunctionCode(
+    loaded,
+    snapshot.code,
+    environment.revisionId,
+  );
+
   await deps.lambda.waitForUpdate(loaded);
 
   await deleteSnapshot(loaded);
@@ -349,7 +390,61 @@ async function runBuild(
     `${build.cached ? "Reused cached build for" : "Created"} ${build.artifactPath} (${build.sizeBytes} bytes, ${build.durationMs} ms)`,
   );
 
+  if (
+    build.sizeBytes > MAX_DIRECT_UPLOAD_BYTES * UPLOAD_WARNING_RATIO &&
+    build.sizeBytes <= MAX_DIRECT_UPLOAD_BYTES
+  ) {
+    warnStep(
+      logger,
+      loaded.targetName,
+      "build",
+      `The zip is ${formatMegabytes(build.sizeBytes)}, close to Lambda's ${formatMegabytes(MAX_DIRECT_UPLOAD_BYTES)} limit for direct uploads. Consider build.external, build.minify, or a layer for large files.`,
+    );
+  }
+
   return build;
+}
+
+function formatMegabytes(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Ask before changing a protected target, unless --yes was passed. Runs before anything changes. */
+async function confirmProtectedChange(
+  loaded: LoadedTarget,
+  action: "deploy" | "rollback",
+  yes: boolean | undefined,
+  deps: RuntimeDeps,
+): Promise<void> {
+  if (!loaded.target.protected || yes) return;
+
+  const answer = await deps.confirm(
+    `Target ${loaded.targetName} is protected. ${action === "deploy" ? "Deploy to" : "Roll back"} ${loaded.target.functionName} in ${loaded.target.region}?`,
+  );
+
+  if (answer === undefined) {
+    throw new LambdaDevError(
+      "validation",
+      `Target ${loaded.targetName} is protected, and there's no terminal to confirm the ${action} in`,
+      { hint: `Pass --yes to ${action} it without asking, for example in CI.` },
+    );
+  }
+
+  if (!answer) {
+    throw new LambdaDevError("validation", `Cancelled the ${action} to ${loaded.targetName}`, {
+      hint: "Nothing was changed in AWS.",
+    });
+  }
+}
+
+export function protectedWatchError(loaded: LoadedTarget): LambdaDevError {
+  return new LambdaDevError(
+    "validation",
+    `Target ${loaded.targetName} is protected, so watch won't deploy it on save`,
+    {
+      hint: "Use deploy for protected targets, or remove protected: true from a development target.",
+    },
+  );
 }
 
 interface NamedCheck {
@@ -476,5 +571,6 @@ function resolveDeps(overrides: Partial<RuntimeDeps> = {}): RuntimeDeps {
   return {
     buildArtifact: overrides.buildArtifact ?? buildArtifact,
     lambda: overrides.lambda ?? new AwsLambdaAdapter(),
+    confirm: overrides.confirm ?? confirmInTerminal,
   };
 }

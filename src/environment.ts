@@ -29,6 +29,11 @@ export interface EnvironmentUpdateResult {
   changed: boolean;
   updatedCount: number;
   deletedCount: number;
+  /**
+   * The function's revision once the environment is in place. A code upload that passes it fails
+   * if anything else changed the function in between.
+   */
+  revisionId?: string;
 }
 
 export function hasEnvironmentPatch(

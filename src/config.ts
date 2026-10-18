@@ -180,6 +180,10 @@ const targetSchema = z
       description:
         "Environment variables to set (string) or delete (null). Unlisted variables are left unchanged.",
     }),
+    protected: z.boolean().default(false).meta({
+      description:
+        "Ask for confirmation before deploy or rollback changes this function, and refuse to watch it. --yes skips the question.",
+    }),
     snapshot: z.boolean().default(true).meta({
       description:
         "Save the function's code and environment before the first deploy, so rollback can restore them.",

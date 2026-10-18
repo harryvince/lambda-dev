@@ -68,7 +68,7 @@ Environment changes and code uploads are separate AWS operations. With a non-emp
 3. Reads the current variables and merges your changes into them.
 4. Writes the configuration only if something changed. The write is tied to the revision it read, so if someone else changed the function in between, it fails instead of overwriting their change. Rerun to pick up the new revision.
 5. Waits for the configuration update to finish.
-6. Uploads the code and waits for that to finish.
+6. Uploads the code and waits for that to finish. The upload is tied to the revision the function had after step 5, so if anything else changed the function in between, such as someone else deploying, it fails instead of mixing their changes with yours.
 7. Invokes the function, if requested.
 
 Each wait gives up after 120 seconds.

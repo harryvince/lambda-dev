@@ -202,16 +202,18 @@ Add `lambda-dev.yml` to `watch.include` alongside your source globs if editing Y
 aws-lambda-dev init [--config lambda-dev.yml]
 aws-lambda-dev validate [target] [--config lambda-dev.yml]
 aws-lambda-dev build [target] [--config lambda-dev.yml] [--no-cache]
-aws-lambda-dev deploy [target] [--config lambda-dev.yml] [--invoke] [--no-cache] [--no-expect] [--check]
+aws-lambda-dev deploy [target] [--config lambda-dev.yml] [--invoke] [--no-cache] [--no-expect] [--check] [--yes]
 aws-lambda-dev invoke [target] [--config lambda-dev.yml] [--payload-file event.json] [--no-expect]
 aws-lambda-dev check [target] [checks...] [--config lambda-dev.yml]
 aws-lambda-dev watch [target] [--config lambda-dev.yml]
-aws-lambda-dev rollback [target] [--config lambda-dev.yml]
+aws-lambda-dev rollback [target] [--config lambda-dev.yml] [--yes]
 ```
 
 Before the first deploy to a function, the CLI saves its current code and environment to `.lambda-dev/snapshots/`. `rollback` restores them, then deletes the snapshot. A failed snapshot stops the deploy before anything changes; set `snapshot: false` on a target to skip it. The snapshot holds environment values in plain text, so keep `.lambda-dev/` out of version control.
 
-Builds are cached in `.lambda-dev/build-cache/`. When a target's build options, copy list, and every bundled and copied file match an earlier build (by any target), `deploy` reuses that zip instead of rebuilding, so deploying the same code to dev, staging, and prod uploads byte-identical artifacts. Set `build.cache: false` or pass `--no-cache` to always rebuild. `build` builds a target without deploying it.
+Builds are cached in `.lambda-dev/build-cache/`. When a target's build options, copy list, and every bundled and copied file match an earlier build (by any target), `deploy` reuses that zip instead of rebuilding, so deploying the same code to dev, staging, and prod uploads byte-identical artifacts. Set `build.cache: false` or pass `--no-cache` to always rebuild. `build` builds a target without deploying it. A zip over 40 MB logs a warning, and one over Lambda's 50 MB direct upload limit fails before anything in AWS changes.
+
+Set `protected: true` on a target, such as production, to make `deploy` and `rollback` ask before changing it; `--yes` skips the question, and is required when there's no terminal, as in CI. `watch` refuses protected targets. When a deploy also updates the environment, the code upload is tied to the function's revision after that update, so a concurrent deploy by someone else fails with `PreconditionFailedException` instead of mixing changes.
 
 For deployment validation, define named `checks` on a target: each sends a known event and describes the expected response, matching only the keys you list. `check` runs them against the function as it is; `deploy --check` runs them right after uploading. Either exits with code 1 if any response doesn't match. `invoke.expect` applies the same matching to every regular invoke.
 

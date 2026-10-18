@@ -39,7 +39,7 @@ Builds the target's zip into `build.outDir` without deploying it. Doesn't call A
 ## `deploy`
 
 ```bash
-aws-lambda-dev deploy [target] [-c lambda-dev.yml] [--invoke] [--payload-file <path>] [--payload-json <json>] [--no-cache] [--no-expect] [--check]
+aws-lambda-dev deploy [target] [-c lambda-dev.yml] [--invoke] [--payload-file <path>] [--payload-json <json>] [--no-cache] [--no-expect] [--check] [-y, --yes]
 ```
 
 Runs one cycle: build, sync environment variables (if configured), upload, optionally invoke, and optionally run [checks](checks.md).
@@ -52,6 +52,9 @@ Runs one cycle: build, sync environment variables (if configured), upload, optio
 | `--no-cache` | Build from scratch even if the [build cache](configuration.md#build-cache) has a match. |
 | `--no-expect` | Don't compare the invoke response with [`invoke.expect`](checks.md#checking-every-invoke). |
 | `--check` | After uploading (and invoking), run all of the target's [checks](checks.md). Fails before building if the target has none. |
+| `-y, --yes` | Deploy a [protected target](configuration.md#protected-targets) without asking. Needed for protected targets when there's no terminal, as in CI. |
+
+A zip over 40 MB logs a warning, because Lambda rejects direct uploads over 50 MB. A zip over 50 MB fails the deploy after the build, before anything in AWS changes.
 
 If `invoke.afterDeploy` is `true` in the config, `deploy` always invokes; there's no flag to skip it for a single run.
 
@@ -74,10 +77,10 @@ Invokes the function as it is now with each of the target's [checks](checks.md) 
 ## `rollback`
 
 ```bash
-aws-lambda-dev rollback [target] [-c lambda-dev.yml]
+aws-lambda-dev rollback [target] [-c lambda-dev.yml] [-y, --yes]
 ```
 
-Restores the target's function to its snapshot from before the first deploy: the original environment variables and code. Then deletes the snapshot. Fails without changing anything if there's no snapshot. See [Rollback](rollback.md).
+For a [protected target](configuration.md#protected-targets), asks first; `--yes` skips the question. Restores the target's function to its snapshot from before the first deploy: the original environment variables and code. Then deletes the snapshot. Fails without changing anything if there's no snapshot. See [Rollback](rollback.md).
 
 ## `watch`
 
@@ -91,6 +94,7 @@ Watches the files in `watch.include` and runs a `deploy` cycle on each change, i
 - Only one cycle runs at a time. A change during a cycle queues exactly one more cycle after it.
 - The config file is re-read at the start of every cycle, so changes to build, environment, and invoke settings apply on the next save. Changes to `watch` settings need a restart.
 - A failed cycle is logged and watching continues.
+- [Protected targets](configuration.md#protected-targets) are refused.
 
 To deploy when `lambda-dev.yml` itself changes, add it to `watch.include`.
 

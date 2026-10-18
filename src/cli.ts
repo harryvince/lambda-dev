@@ -71,8 +71,10 @@ export function createProgram(): Command {
     .option("--no-cache", "Rebuild even if a cached build matches")
     .option("--no-expect", "Don't compare the invoke response with invoke.expect")
     .option("--check", "Run the target's checks after uploading")
+    .option("-y, --yes", "Deploy a protected target without asking")
     .action(async (target, options) => {
       await deployTarget({
+        yes: options.yes,
         configPath: options.config,
         targetName: target,
         invoke: options.invoke,
@@ -124,8 +126,10 @@ export function createProgram(): Command {
     .description("Restore a target's function to how it was before its first deploy.")
     .argument("[target]", "Target name")
     .option("-c, --config <path>", "Config file path", "lambda-dev.yml")
+    .option("-y, --yes", "Roll back a protected target without asking")
     .action(async (target, options) => {
       await rollbackTarget({
+        yes: options.yes,
         configPath: options.config,
         targetName: target,
         logger: consoleLogger,

@@ -75,6 +75,11 @@
               ]
             }
           },
+          "protected": {
+            "default": false,
+            "description": "Ask for confirmation before deploy or rollback changes this function, and refuse to watch it. --yes skips the question.",
+            "type": "boolean"
+          },
           "snapshot": {
             "default": true,
             "description": "Save the function's code and environment before the first deploy, so rollback can restore them.",

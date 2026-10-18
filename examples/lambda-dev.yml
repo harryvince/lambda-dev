@@ -57,6 +57,7 @@ targets:
   # staging:
   #   functionName: my-existing-lambda-staging
   #   region: eu-west-2
+  #   protected: true # Ask before deploy or rollback; watch refuses it.
   #   build:
   #     <<: *sharedBuild
   #     minify: true

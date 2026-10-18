@@ -12,6 +12,7 @@ import {
 import AdmZip from "adm-zip";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { checkTarget, deployTarget, invokeTarget, rollbackTarget } from "../../src/core.js";
+import { AwsLambdaAdapter } from "../../src/aws.js";
 import { readSnapshot } from "../../src/snapshot.js";
 import { validateTarget } from "../../src/core.js";
 
@@ -98,7 +99,12 @@ describe("against a local Lambda emulator", () => {
   it("deploys, syncs the environment, and invokes the new code", async () => {
     const summary = await deployTarget({ configPath, invoke: true, logger: memoryLogger() });
 
-    expect(summary.environment).toEqual({ changed: true, updatedCount: 2, deletedCount: 0 });
+    expect(summary.environment).toEqual({
+      changed: true,
+      updatedCount: 2,
+      deletedCount: 0,
+      revisionId: expect.any(String),
+    });
     expect(summary.invoke?.statusCode).toBe(200);
     expect(summary.invoke?.payload).toEqual({
       version: "dev",
@@ -125,6 +131,17 @@ describe("against a local Lambda emulator", () => {
     expect(snapshot?.environment).toEqual({ KEEP: "kept", FLAG: "original" });
   });
 
+  it("refuses a code upload against a stale revision", async () => {
+    const loaded = await validateTarget(configPath);
+
+    await expect(
+      new AwsLambdaAdapter().updateFunctionCode(loaded, new Uint8Array([1]), "stale-revision"),
+    ).rejects.toMatchObject({
+      category: "aws_deploy",
+      message: expect.stringContaining("PreconditionFailedException"),
+    });
+  });
+
   it("passes checks that match the deployed code and fails the rest", async () => {
     const [result] = await checkTarget({
       configPath,
@@ -142,7 +159,12 @@ describe("against a local Lambda emulator", () => {
   it("rolls back the code and environment, then deletes the snapshot", async () => {
     const summary = await rollbackTarget({ configPath, logger: memoryLogger() });
 
-    expect(summary.environment).toEqual({ changed: true, updatedCount: 1, deletedCount: 1 });
+    expect(summary.environment).toEqual({
+      changed: true,
+      updatedCount: 1,
+      deletedCount: 1,
+      revisionId: expect.any(String),
+    });
     expect(await environment()).toEqual({ KEEP: "kept", FLAG: "original" });
 
     const invoked = await invokeTarget({ configPath, logger: memoryLogger() });

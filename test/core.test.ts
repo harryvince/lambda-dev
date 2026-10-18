@@ -144,7 +144,7 @@ function fakeLambda(): LambdaAdapter {
       .mockResolvedValue({ changed: false, updatedCount: 0, deletedCount: 0 }),
     restoreEnvironment: vi
       .fn()
-      .mockResolvedValue({ changed: true, updatedCount: 1, deletedCount: 1 }),
+      .mockResolvedValue({ changed: true, updatedCount: 1, deletedCount: 1, revisionId: "rev-9" }),
     downloadFunction: vi.fn().mockResolvedValue({
       code: ORIGINAL_CODE,
       codeSha256: sha256Base64(ORIGINAL_CODE),
@@ -482,6 +482,7 @@ describe("rollback snapshots", () => {
     expect(lambda.updateFunctionCode).toHaveBeenCalledWith(
       expect.anything(),
       Buffer.from(ORIGINAL_CODE),
+      "rev-9",
     );
     expect(lambda.waitForUpdate).toHaveBeenCalledOnce();
     expect(result.environment.changed).toBe(true);
@@ -687,5 +688,208 @@ describe("invoke.expect", () => {
     });
 
     expect(logger.info).toHaveBeenCalledWith("[dev] invoke: Response matches invoke.expect");
+  });
+});
+
+describe("concurrent deploy guard", () => {
+  it("uploads code against the revision left by the environment sync", async () => {
+    const lambda = fakeLambda();
+    lambda.updateEnvironment = vi
+      .fn()
+      .mockResolvedValue({ changed: true, updatedCount: 1, deletedCount: 0, revisionId: "rev-3" });
+
+    await deployTarget({
+      configPath: await environmentConfig(),
+      invoke: false,
+      logger: memoryLogger(),
+      deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+    });
+
+    expect(lambda.updateFunctionCode).toHaveBeenCalledWith(
+      expect.anything(),
+      built().artifactBytes,
+      "rev-3",
+    );
+  });
+
+  it("uploads code-only targets without a revision", async () => {
+    const lambda = fakeLambda();
+
+    await deployTarget({
+      configPath: await writeProjectConfig(false),
+      logger: memoryLogger(),
+      deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+    });
+
+    expect(lambda.updateFunctionCode).toHaveBeenCalledWith(
+      expect.anything(),
+      built().artifactBytes,
+      undefined,
+    );
+  });
+});
+
+async function protectedConfig(): Promise<string> {
+  const file = await writeProjectConfig(false);
+  await writeFile(
+    file,
+    (await readFile(file, "utf8")).replace("    build:", "    protected: true\n    build:"),
+  );
+
+  return file;
+}
+
+describe("protected targets", () => {
+  it("asks before deploying and deploys on yes", async () => {
+    const lambda = fakeLambda();
+    const confirm = vi.fn().mockResolvedValue(true);
+
+    await deployTarget({
+      configPath: await protectedConfig(),
+      logger: memoryLogger(),
+      deps: { lambda, confirm, buildArtifact: vi.fn().mockResolvedValue(built()) },
+    });
+
+    expect(confirm).toHaveBeenCalledWith(
+      "Target dev is protected. Deploy to dev-function in eu-west-2?",
+    );
+    expect(lambda.updateFunctionCode).toHaveBeenCalledOnce();
+  });
+
+  it("stops before building when the answer is no, or there's no terminal", async () => {
+    for (const answer of [false, undefined]) {
+      const lambda = fakeLambda();
+      const buildArtifact = vi.fn();
+
+      await expect(
+        deployTarget({
+          configPath: await protectedConfig(),
+          logger: memoryLogger(),
+          deps: { lambda, buildArtifact, confirm: vi.fn().mockResolvedValue(answer) },
+        }),
+      ).rejects.toMatchObject({
+        category: "validation",
+        hint:
+          answer === undefined ? expect.stringContaining("--yes") : "Nothing was changed in AWS.",
+      });
+      expect(buildArtifact).not.toHaveBeenCalled();
+      expect(lambda.downloadFunction).not.toHaveBeenCalled();
+      expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
+    }
+  });
+
+  it("skips the question with --yes, and never asks for unprotected targets", async () => {
+    const confirm = vi.fn();
+
+    const deps = {
+      confirm,
+      lambda: fakeLambda(),
+      buildArtifact: vi.fn().mockResolvedValue(built()),
+    };
+
+    await deployTarget({
+      configPath: await protectedConfig(),
+      yes: true,
+      logger: memoryLogger(),
+      deps,
+    });
+    await deployTarget({
+      configPath: await writeProjectConfig(false),
+      logger: memoryLogger(),
+      deps,
+    });
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(deps.lambda.updateFunctionCode).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses deploys from watch even with --yes", async () => {
+    const confirm = vi.fn();
+    const buildArtifact = vi.fn();
+
+    await expect(
+      deployTarget({
+        configPath: await protectedConfig(),
+        fromWatch: true,
+        yes: true,
+        logger: memoryLogger(),
+        deps: { confirm, buildArtifact, lambda: fakeLambda() },
+      }),
+    ).rejects.toMatchObject({ category: "validation" });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(buildArtifact).not.toHaveBeenCalled();
+  });
+
+  it("asks before rolling back", async () => {
+    const configPath = await protectedConfig();
+    const lambda = fakeLambda();
+    const buildArtifact = vi.fn().mockResolvedValue(built());
+    await deployTarget({
+      configPath,
+      yes: true,
+      logger: memoryLogger(),
+      deps: { lambda, buildArtifact },
+    });
+
+    await expect(
+      rollbackTarget({
+        configPath,
+        logger: memoryLogger(),
+        deps: { lambda, confirm: vi.fn().mockResolvedValue(false) },
+      }),
+    ).rejects.toMatchObject({ message: "Cancelled the rollback to dev" });
+    expect(lambda.restoreEnvironment).not.toHaveBeenCalled();
+
+    await rollbackTarget({ configPath, yes: true, logger: memoryLogger(), deps: { lambda } });
+    expect(lambda.restoreEnvironment).toHaveBeenCalledOnce();
+  });
+});
+
+describe("zip size", () => {
+  const MB = 1024 * 1024;
+
+  it("warns when the zip is close to the 50 MB direct upload limit", async () => {
+    const logger = memoryLogger();
+
+    await buildTarget({
+      configPath: await writeProjectConfig(false),
+      logger,
+      deps: { buildArtifact: vi.fn().mockResolvedValue({ ...built(), sizeBytes: 45 * MB }) },
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[dev\] build: The zip is 45\.0 MB, close to Lambda's 50\.0 MB limit/,
+      ),
+    );
+  });
+
+  it("doesn't warn for small zips", async () => {
+    const logger = memoryLogger();
+
+    await buildTarget({
+      configPath: await writeProjectConfig(false),
+      logger,
+      deps: { buildArtifact: vi.fn().mockResolvedValue({ ...built(), sizeBytes: 39 * MB }) },
+    });
+
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("fails a deploy over the limit before changing AWS", async () => {
+    const lambda = fakeLambda();
+
+    await expect(
+      deployTarget({
+        configPath: await writeProjectConfig(true),
+        logger: memoryLogger(),
+        deps: {
+          lambda,
+          buildArtifact: vi.fn().mockResolvedValue({ ...built(), sizeBytes: 51 * MB }),
+        },
+      }),
+    ).rejects.toMatchObject({ category: "build", message: expect.stringContaining("51.0 MB") });
+    expect(lambda.downloadFunction).not.toHaveBeenCalled();
+    expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
   });
 });

@@ -109,6 +109,7 @@ function loadedTarget(): LoadedTarget {
     target: {
       functionName: "dev-function",
       region: "eu-west-2",
+      protected: false,
       snapshot: true,
       build: {
         entry: "handler.ts",
@@ -156,7 +157,9 @@ describe("Lambda environment synchronization", () => {
       .fn()
       .mockResolvedValueOnce(ready({ KEEP: PRIVATE_VALUE, OLD_FLAG: "old" }))
       .mockResolvedValueOnce({ $metadata: {} })
-      .mockResolvedValueOnce(ready({ KEEP: PRIVATE_VALUE, LOG_LEVEL: "debug", EMPTY: "" }));
+      .mockResolvedValueOnce(
+        ready({ KEEP: PRIVATE_VALUE, LOG_LEVEL: "debug", EMPTY: "" }, "rev-2"),
+      );
 
     let release!: (value: never) => void;
 
@@ -195,7 +198,13 @@ describe("Lambda environment synchronization", () => {
     ]);
     // SAFETY: the adapter ignores the waiter's result, so any value releases it.
     release({ state: "SUCCESS" } as never);
-    expect(await pending).toEqual({ changed: true, updatedCount: 2, deletedCount: 1 });
+    // The revision is the one read after the wait, for the code upload to pass on.
+    expect(await pending).toEqual({
+      changed: true,
+      updatedCount: 2,
+      deletedCount: 1,
+      revisionId: "rev-2",
+    });
     expect(JSON.stringify(await pending)).not.toContain(PRIVATE_VALUE);
   });
 
@@ -399,6 +408,36 @@ describe("Lambda environment synchronization", () => {
     await assertion;
   });
 
+  it("guards the code upload with the given revision", async () => {
+    const send = vi.fn().mockResolvedValue({ Version: "$LATEST", $metadata: {} });
+    await new AwsLambdaAdapter(fakeClient(send)).updateFunctionCode(
+      patchedTarget(),
+      new Uint8Array([1]),
+      "rev-2",
+    );
+
+    expect(send.mock.calls[0][0]).toBeInstanceOf(UpdateFunctionCodeCommand);
+    expect(send.mock.calls[0][0].input).toMatchObject({ RevisionId: "rev-2" });
+  });
+
+  it("explains a code upload rejected because the function changed during the deploy", async () => {
+    const conflict = Object.assign(new Error(PRIVATE_VALUE), {
+      name: "PreconditionFailedException",
+    });
+
+    await expect(
+      new AwsLambdaAdapter(fakeClient(vi.fn().mockRejectedValue(conflict))).updateFunctionCode(
+        patchedTarget(),
+        new Uint8Array([1]),
+        "rev-2",
+      ),
+    ).rejects.toMatchObject({
+      category: "aws_deploy",
+      message: expect.stringContaining("changed while this deploy was running"),
+      hint: expect.stringContaining("Someone else may be deploying"),
+    });
+  });
+
   it("sanitizes upload failures in environment-enabled deployments", async () => {
     const send = vi.fn().mockRejectedValue(new Error(PRIVATE_VALUE));
     await expect(
@@ -484,7 +523,7 @@ describe("rollback snapshot reads and restores", () => {
       .fn()
       .mockResolvedValueOnce(ready({ KEEP: "changed", ADDED: "x" }))
       .mockResolvedValueOnce({ $metadata: {} })
-      .mockResolvedValueOnce(ready({ KEEP: PRIVATE_VALUE }));
+      .mockResolvedValueOnce(ready({ KEEP: PRIVATE_VALUE }, "rev-2"));
 
     const wait = vi.fn().mockResolvedValue({ state: "SUCCESS" });
 
@@ -498,6 +537,11 @@ describe("rollback snapshot reads and restores", () => {
       RevisionId: "rev-1",
       Environment: { Variables: { KEEP: PRIVATE_VALUE } },
     });
-    expect(result).toEqual({ changed: true, updatedCount: 1, deletedCount: 1 });
+    expect(result).toEqual({
+      changed: true,
+      updatedCount: 1,
+      deletedCount: 1,
+      revisionId: "rev-2",
+    });
   });
 });

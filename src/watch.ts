@@ -1,6 +1,6 @@
 import chokidar from "chokidar";
 import path from "node:path";
-import { deployTarget, type RuntimeDeps } from "./core.js";
+import { deployTarget, protectedWatchError, type RuntimeDeps } from "./core.js";
 import { loadTarget } from "./config.js";
 import { splitGlob, toUnixPath } from "./glob.js";
 import { formatError, logStep, type Logger } from "./output.js";
@@ -24,6 +24,10 @@ export interface WatchOptions {
 export async function watchTarget(options: WatchOptions): Promise<FileWatcher> {
   const loaded = await loadTarget(options.configPath, options.targetName);
 
+  if (loaded.target.protected) {
+    throw protectedWatchError(loaded);
+  }
+
   const watchPlan = createWatchPlan(
     loaded.projectRoot,
     loaded.target.watch.include,
@@ -37,6 +41,7 @@ export async function watchTarget(options: WatchOptions): Promise<FileWatcher> {
     await deployTarget({
       configPath: options.configPath,
       targetName: loaded.targetName,
+      fromWatch: true,
       logger: options.logger,
       deps: options.deps,
     });

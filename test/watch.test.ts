@@ -184,3 +184,34 @@ targets:
 class FakeWatcher extends EventEmitter {
   close = vi.fn().mockResolvedValue(undefined);
 }
+
+describe("protected targets", () => {
+  it("refuses to watch a protected target", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "lambda-dev-watch-protected-"));
+    await writeFile(
+      path.join(root, "lambda-dev.yml"),
+      `version: 1
+targets:
+  prod:
+    functionName: prod-function
+    region: eu-west-2
+    protected: true
+    build:
+      entry: src/handler.ts
+`,
+    );
+    const watchFactory = vi.fn();
+
+    await expect(
+      watchTarget({
+        configPath: path.join(root, "lambda-dev.yml"),
+        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        watchFactory,
+      }),
+    ).rejects.toMatchObject({
+      category: "validation",
+      message: expect.stringContaining("protected"),
+    });
+    expect(watchFactory).not.toHaveBeenCalled();
+  });
+});

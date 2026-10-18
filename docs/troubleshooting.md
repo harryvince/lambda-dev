@@ -33,7 +33,7 @@ The config file couldn't be read. Check the path, or pass `--config`.
 
 ## `build`
 
-esbuild failed, or a `build.copy` entry is invalid. The upload and invoke are skipped. In `watch` mode, fix the error and save again.
+esbuild failed, a `build.copy` entry is invalid, or the zip is over Lambda's 50 MB limit for direct uploads. For a large zip, leave dependencies the runtime already has out of the bundle with `build.external` (such as `@aws-sdk/*`), turn on `build.minify`, or move large files to a layer. The upload and invoke are skipped. In `watch` mode, fix the error and save again.
 
 ## `aws_snapshot`
 
@@ -61,6 +61,8 @@ A previous step may already have completed, so check the function's state in the
 ## `aws_deploy`
 
 The code upload failed. Usually credentials, region, function name, or a missing `lambda:UpdateFunctionCode` permission. If credentials couldn't be loaded at all, the hint names the `profile` to check; for SSO profiles, run `aws sso login --profile <name>` first. If the target has `environment`, the environment update may already have been applied.
+
+**`PreconditionFailedException`** means the function changed between this deploy's environment update and its code upload, usually because someone else deployed to it at the same time. Your code wasn't uploaded, so nothing was silently overwritten, but your environment changes were applied. Check the function's current state, then rerun.
 
 ## `aws_invoke`
 

@@ -66,3 +66,7 @@ export function formatError(cause: unknown): string {
 export function logStep(logger: Logger, targetName: string, step: string, message: string): void {
   logger.info(`[${targetName}] ${step}: ${message}`);
 }
+
+export function warnStep(logger: Logger, targetName: string, step: string, message: string): void {
+  logger.warn(`[${targetName}] ${step}: ${message}`);
+}
