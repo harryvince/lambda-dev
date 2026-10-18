@@ -21,6 +21,18 @@ mise run typecheck  # types only
 
 Tests use Vitest and never call AWS; they inject fake Lambda clients and build functions. Run `mise run check` before opening a pull request.
 
+## Config schema
+
+`docs/schema.json` is generated from the zod schema in `src/config.ts` and published with the docs site. After changing the config schema, regenerate it:
+
+```bash
+mise run schema
+```
+
+A test fails if the committed file is out of date. Field descriptions shown in editors come from the `.meta({ description })` calls in `src/config.ts`.
+
+## Trying it out
+
 To try the CLI against a real function, build it and run `dist/cli.js` from a project with a `lambda-dev.yml`:
 
 ```bash
@@ -39,7 +51,7 @@ mise run docs:build  # build into site/, failing on warnings such as broken link
 
 Add a new page to the `nav` list in `zensical.toml` so it appears in the sidebar.
 
-Every push to `main` that changes `docs/` or `zensical.toml` rebuilds and deploys the site to GitHub Pages through `.github/workflows/docs.yml`. Pull requests that touch the docs are built but not deployed, so broken links fail the check before merging.
+Every push to `main` that changes `docs/` (including `schema.json`) or `zensical.toml` rebuilds and deploys the site to GitHub Pages through `.github/workflows/docs.yml`. Pull requests that touch the docs are built but not deployed, so broken links fail the check before merging.
 
 When you change user-facing behaviour, update the docs in the same pull request.
 

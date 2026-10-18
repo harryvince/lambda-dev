@@ -36,11 +36,12 @@ Or run it without installing, using `npx aws-lambda-dev` or `bunx aws-lambda-dev
 npx aws-lambda-dev init
 ```
 
-This writes a starter `lambda-dev.yml` in the current directory. It won't overwrite an existing file.
+This writes a starter `lambda-dev.yml` in the current directory. It won't overwrite an existing file. Its first line links the [config schema](configuration.md#editor-support), so most editors will autocomplete and check it as you type.
 
 Edit it so the `dev` target points at your function and handler:
 
 ```yaml title="lambda-dev.yml"
+# yaml-language-server: $schema=https://harryvince.github.io/lambda-dev/schema.json
 version: 1
 defaultTarget: dev
 targets:

@@ -59,7 +59,10 @@ Pushing a `v*` tag (which `mise run version` does) also triggers `.github/workfl
 
 ## Config
 
+Configs include a link to the [JSON Schema](https://harryvince.github.io/lambda-dev/schema.json), so editors using the YAML language server autocomplete and validate them. See [Editor support](https://harryvince.github.io/lambda-dev/configuration/#editor-support).
+
 ```yaml
+# yaml-language-server: $schema=https://harryvince.github.io/lambda-dev/schema.json
 version: 1
 defaultTarget: dev
 targets:
@@ -127,6 +130,7 @@ Asset changes trigger watch rebuilds only when their paths are included in `watc
 Use anchors (`&name`) and aliases (`*name`) to reuse build options or copy lists across targets. Mapping merge keys (`<<`) let a target override individual values:
 
 ```yaml
+# yaml-language-server: $schema=https://harryvince.github.io/lambda-dev/schema.json
 version: 1
 defaultTarget: dev
 targets:
@@ -154,6 +158,7 @@ Define an anchor before its alias. Explicit values override merged values. For m
 Set `environment` on a target to update runtime variables during `deploy` and `watch`:
 
 ```yaml
+# yaml-language-server: $schema=https://harryvince.github.io/lambda-dev/schema.json
 version: 1
 defaultTarget: dev
 targets:
@@ -232,3 +237,7 @@ Use the smallest resource ARN that matches your development Lambda.
 - `aws_invoke`: deploy may have succeeded, but the test invocation failed.
 
 Watch mode debounces rapid saves and serializes deploys per target. If a file changes while a deploy is active, another cycle is queued after the current one finishes.
+
+## License
+
+[MIT](LICENSE)

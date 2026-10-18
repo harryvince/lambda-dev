@@ -7,76 +7,92 @@ import { RESERVED_ENVIRONMENT_KEYS } from "./environment.js";
 
 const environmentKey = z.string()
   .regex(/^[A-Za-z][A-Za-z0-9_]+$/, "Use a letter first and at least two letters, digits, or underscores")
-  .refine((key) => !RESERVED_ENVIRONMENT_KEYS.has(key), "Variable name is reserved by Lambda");
+  .refine((key) => !RESERVED_ENVIRONMENT_KEYS.has(key), "Variable name is reserved by Lambda")
+  // Refinements don't reach the generated JSON Schema, so spell the reserved names out for editors.
+  .meta({ not: { enum: [...RESERVED_ENVIRONMENT_KEYS] } });
 
 const buildSchema = z
   .object({
-    entry: z.string().min(1),
-    bundle: z.boolean().default(true),
-    platform: z.enum(["node", "browser", "neutral"]).default("node"),
-    target: z.string().default("node20"),
-    format: z.enum(["cjs", "esm", "iife"]).default("cjs"),
-    sourcemap: z.boolean().default(true),
-    minify: z.boolean().default(false),
-    external: z.array(z.string()).default([]),
-    define: z.record(z.string(), z.string()).default({}),
+    entry: z.string().min(1).meta({ description: "Handler source file, relative to the config file. Bundled to index.js." }),
+    bundle: z.boolean().default(true).meta({ description: "Bundle dependencies into index.js." }),
+    platform: z.enum(["node", "browser", "neutral"]).default("node").meta({ description: "esbuild platform." }),
+    target: z.string().default("node20").meta({ description: "esbuild target, e.g. node22. Match the function's runtime." }),
+    format: z.enum(["cjs", "esm", "iife"]).default("cjs").meta({ description: "Output module format." }),
+    sourcemap: z.boolean().default(true).meta({ description: "Emit index.js.map and include it in the zip." }),
+    minify: z.boolean().default(false).meta({ description: "Minify the bundle." }),
+    external: z.array(z.string()).default([]).meta({ description: "Packages to leave out of the bundle, e.g. \"@aws-sdk/*\"." }),
+    define: z.record(z.string(), z.string()).default({}).meta({
+      description: "esbuild define replacements. Values are code, so strings need inner quotes: '\"dev\"'.",
+    }),
     copy: z.array(z.object({
-      from: z.string().trim().min(1),
-      to: z.string().trim().min(1),
-    }).strict()).default([]),
-    outDir: z.string().optional(),
+      from: z.string().trim().min(1).meta({ description: "File, directory, or glob, relative to the config file." }),
+      to: z.string().trim().min(1).meta({ description: "Destination relative to the zip root. Use . for the root." }),
+    }).strict()).default([]).meta({ description: "Extra files to copy into the build output and zip." }),
+    outDir: z.string().optional().meta({ description: "Build output directory. Defaults to .lambda-dev/<target>. Cleared on every build." }),
   })
-  .strict();
+  .strict()
+  .meta({ description: "esbuild options for the handler bundle." });
 
 const watchSchema = z
   .object({
-    include: z.array(z.string()).default(["src/**/*"]),
-    exclude: z.array(z.string()).default(["node_modules/**", "dist/**", ".lambda-dev/**"]),
-    debounceMs: z.number().int().min(0).default(300),
+    include: z.array(z.string()).default(["src/**/*"]).meta({ description: "Globs of files that trigger a deploy." }),
+    exclude: z.array(z.string()).default(["node_modules/**", "dist/**", ".lambda-dev/**"]).meta({
+      description: "Globs to ignore, even if included.",
+    }),
+    debounceMs: z.number().int().min(0).default(300).meta({ description: "Quiet period after the last change before deploying." }),
   })
   .strict()
   .default({
     include: ["src/**/*"],
     exclude: ["node_modules/**", "dist/**", ".lambda-dev/**"],
     debounceMs: 300,
-  });
+  })
+  .meta({ description: "File watching for the watch command." });
 
 const invokeSchema = z
   .object({
-    afterDeploy: z.boolean().default(false),
-    payloadFile: z.string().optional(),
-    payloadJson: z.unknown().optional(),
-    logType: z.enum(["None", "Tail"]).default("Tail"),
+    afterDeploy: z.boolean().default(false).meta({ description: "Invoke after every deploy and watch cycle." }),
+    payloadFile: z.string().optional().meta({ description: "JSON event file, relative to the config file." }),
+    payloadJson: z.unknown().optional().meta({ description: "Inline event. Takes priority over payload files." }),
+    logType: z.enum(["None", "Tail"]).default("Tail").meta({ description: "Tail requests the last 4 KB of logs with the response." }),
   })
   .strict()
   .default({
     afterDeploy: false,
     logType: "Tail",
-  });
+  })
+  .meta({ description: "Test invocation settings." });
 
 const targetSchema = z
   .object({
-    functionName: z.string().min(1),
-    region: z.string().min(1),
-    profile: z.string().min(1).optional(),
-    environment: z.record(environmentKey, z.string().nullable()).optional(),
+    functionName: z.string().min(1).meta({ description: "Name or ARN of an existing Lambda function." }),
+    region: z.string().min(1).meta({ description: "AWS region, e.g. eu-west-2." }),
+    profile: z.string().min(1).optional().meta({
+      description: "Named AWS profile. Without it, the default AWS SDK credential chain is used.",
+    }),
+    environment: z.record(environmentKey, z.string().nullable()).optional().meta({
+      description: "Environment variables to set (string) or delete (null). Unlisted variables are left unchanged.",
+    }),
     build: buildSchema,
     watch: watchSchema,
     invoke: invokeSchema,
   })
-  .strict();
+  .strict()
+  .meta({ description: "One Lambda function to build and deploy." });
 
-const configSchema = z
+export const configSchema = z
   .object({
-    version: z.literal(1),
-    defaultTarget: z.string().optional(),
+    version: z.literal(1).meta({ description: "Config format version. Must be 1." }),
+    defaultTarget: z.string().optional().meta({ description: "Target used when none is passed on the command line." }),
     targets: z
       .record(z.string().min(1), targetSchema)
       .refine((targets) => Object.keys(targets).length > 0, {
         message: "At least one target is required",
-      }),
+      })
+      .meta({ description: "Map of target name to target settings.", minProperties: 1 }),
   })
-  .strict();
+  .strict()
+  .meta({ title: "aws-lambda-dev config", description: "Configuration for aws-lambda-dev (lambda-dev.yml)." });
 
 export type RawConfig = z.infer<typeof configSchema>;
 export type TargetConfig = z.infer<typeof targetSchema>;

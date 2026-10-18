@@ -1,7 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { CONFIG_SCHEMA_URL } from "./schema.js";
 
-export const starterConfig = `version: 1
+export const starterConfig = `# yaml-language-server: $schema=${CONFIG_SCHEMA_URL}
+version: 1
 defaultTarget: dev
 targets:
   dev:

@@ -43,7 +43,7 @@ User documentation is a [Zensical](https://zensical.org) site: Markdown pages in
 - ESM with `NodeNext` resolution: relative imports in `src/` must use the `.js` extension.
 - Strict TypeScript. Dependencies are pinned to exact versions; keep it that way.
 - Errors that reach the user must be `LambdaDevError` with one of the existing categories (`validation`, `build`, `aws_deploy`, `aws_configuration`, `aws_invoke`, `filesystem`, `unexpected`). Wrap unknown errors with `toLambdaDevError`. The README troubleshooting section is keyed by these categories.
-- Config schemas are `.strict()`: new config keys need a schema change, a README section, and usually an update to `examples/lambda-dev.yml` and `src/scaffold.ts`.
+- Config schemas are `.strict()`: new config keys need a schema change with a `.meta({ description })`, a regenerated `docs/schema.json` (`mise run schema`; a test enforces it), docs in `docs/configuration.md`, and usually an update to `examples/lambda-dev.yml` and `src/scaffold.ts`.
 - Config-relative paths (entry, copy sources, payload files, watch globs) resolve against the directory containing `lambda-dev.yml`, not the CWD.
 - Tests must not call AWS. Inject a fake `LambdaAdapter` and/or `buildArtifact` through `deps`, and a fake `watchFactory` for watch tests. Use temp directories (`mkdtemp`) for filesystem fixtures.
 

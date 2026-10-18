@@ -4,9 +4,34 @@ The CLI reads `lambda-dev.yml` from the current directory, or the path given wit
 
 Unknown keys are rejected, so typos fail validation instead of being silently ignored.
 
+## Editor support
+
+A [JSON Schema](https://harryvince.github.io/lambda-dev/schema.json) for `lambda-dev.yml` gives you autocomplete, descriptions on hover, and errors as you type, in any editor that uses the [YAML language server](https://github.com/redhat-developer/yaml-language-server) (VS Code with the Red Hat YAML extension, Neovim, Zed, Helix, and others).
+
+Configs created by `init` already start with this line, which is all those editors need:
+
+```yaml
+# yaml-language-server: $schema=https://harryvince.github.io/lambda-dev/schema.json
+```
+
+To apply the schema without the comment, map it to the file name in your editor instead. In VS Code, add this to `settings.json`:
+
+```json
+{
+  "yaml.schemas": {
+    "https://harryvince.github.io/lambda-dev/schema.json": "lambda-dev.yml"
+  }
+}
+```
+
+In JetBrains IDEs, add the URL under **Settings → Languages & Frameworks → Schemas and DTDs → JSON Schema Mappings**.
+
+The schema is generated from the same definition the CLI validates with. It checks everything except a few things that need the file system or AWS, such as whether `entry` exists or the 4 KB environment limit, so still run `validate` before relying on a config.
+
 ## Full example
 
 ```yaml title="lambda-dev.yml"
+# yaml-language-server: $schema=https://harryvince.github.io/lambda-dev/schema.json
 version: 1
 defaultTarget: dev
 targets:
@@ -117,6 +142,7 @@ See [Payloads](commands.md#payloads) for how command-line flags interact with th
 YAML anchors (`&name`) and aliases (`*name`) let targets reuse blocks. Merge keys (`<<`) let a target override individual values:
 
 ```yaml
+# yaml-language-server: $schema=https://harryvince.github.io/lambda-dev/schema.json
 version: 1
 defaultTarget: dev
 targets:

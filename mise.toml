@@ -19,6 +19,10 @@ run = "bun run test"
 description = "Build the TypeScript package."
 run = "bun run build"
 
+[tasks.schema]
+description = "Regenerate docs/schema.json from the config schema."
+run = "bun scripts/generate-schema.ts"
+
 [tasks.check]
 description = "Run typecheck, tests, and build with Bun."
 depends = ["typecheck", "test", "build"]

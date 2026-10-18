@@ -5,4 +5,5 @@ export * from "./core.js";
 export * from "./errors.js";
 export * from "./output.js";
 export * from "./scaffold.js";
+export * from "./schema.js";
 export * from "./watch.js";
