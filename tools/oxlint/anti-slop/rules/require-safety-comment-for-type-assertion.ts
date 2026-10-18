@@ -38,6 +38,8 @@ function markerPattern(markers: readonly string[]): RegExp {
   const alternation = markers
     .map((marker) => marker.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`))
     .join("|");
+  // Markers come from the lint config and every regex metacharacter is escaped above.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
   return new RegExp(
     String.raw`(?:^|[^\p{L}\p{N}_])(?:${alternation})\s*:\s*\S`,
     "u",

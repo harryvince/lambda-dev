@@ -2,24 +2,59 @@
 
 ## Setup
 
-Tool versions (Node.js, Bun, uv) are pinned in `mise.toml`.
+Tool versions (Node.js, Bun, uv, prek) are pinned in `mise.toml`. Node.js must be 22.20+ or 24.8+.
 
 ```bash
 git clone https://github.com/harryvince/lambda-dev.git
 cd lambda-dev
 mise install
-mise run install
+mise run install   # installs dependencies and the Git hooks
+```
+
+## Git hooks (mandatory)
+
+Every commit must pass the [prek](https://prek.j178.dev) hooks in `.pre-commit-config.yaml`. `mise run install` installs them; if you cloned before they existed, run `prek install` once.
+
+| Hook | Runs | When |
+| --- | --- | --- |
+| `fix` | oxfmt and `oxlint --fix` | any code, JSON, Markdown, or YAML change |
+| `lint` | oxlint with the [anti-slop](#lint-rules) rules | any code change |
+| `scan-deps` | Trivy (`mise run scan:deps`) | `package.json` or `bun.lock` changes |
+| `scan-code` | Semgrep (`mise run scan:code`) | any code, JSON, or YAML change |
+
+If `fix` changes files, the commit stops so you can review and stage them; commit again. Fix anything `lint` or the scans report rather than skipping it. **Don't bypass the hooks with `git commit --no-verify`.** To run every hook on the whole repository:
+
+```bash
+prek run --all-files
 ```
 
 ## Checks
 
 ```bash
-mise run check      # typecheck, tests, and build
-mise run test       # tests only
-mise run typecheck  # types only
+mise run check         # format check, lint, typecheck, tests, and build
+mise run fix           # apply formatting and lint autofixes
+mise run lint          # oxlint only
+mise run format:check  # formatting only
+mise run test          # tests only
+mise run typecheck     # types for src, tests, and scripts
 ```
 
-Tests use Vitest and never call AWS; they inject fake Lambda clients and build functions. Run `mise run check` before opening a pull request.
+Tests use Vitest and never call AWS; they inject fake Lambda clients and build functions. Run `mise run check` before opening a pull request. The publish workflow runs it too, so a release can't go out with lint or format errors.
+
+## Lint rules
+
+oxlint runs with the [anti-slop](https://github.com/dmmulroy/anti-slop) rules, vendored in `tools/oxlint/anti-slop/` (see its `UPSTREAM.md`). They push code to parse data where it enters the program instead of passing `unknown` around. In practice:
+
+- **Parse external data at the boundary.** JSON goes through `parseJson` (`src/json.ts`), config and AWS responses through zod schemas. Don't narrow with `typeof`.
+- **Only error-handling parameters may be `unknown`**, and they're named `cause`.
+- **Every type assertion needs a `// SAFETY:` comment** just before it, stating why it holds. Prefer removing the assertion.
+- **Name object types** in function signatures rather than writing them inline.
+- **Build objects with explicit assignments**, not `...(condition ? { field } : {})`.
+- **Blank lines** between statements and declarations are enforced and autofixed.
+
+Never silence a rule, lower its severity, or add casts just to make lint pass. If a rule is wrong for a case, discuss changing the vendored rule.
+
+oxfmt doesn't format `docs/**/*.md` (it would break Zensical's indented admonitions and tabs), `CHANGELOG.md`, `docs/schema.json`, or the vendored rules; see `.oxfmtrc.json`.
 
 ## Security scans
 
@@ -30,6 +65,8 @@ mise run scan       # both
 ```
 
 Each task installs its scanner at a pinned version the first time it runs, so `mise install` stays light. Both exit non-zero when they find something.
+
+These also run as Git hooks: `scan-deps` when dependencies change, and `scan-code` when code changes.
 
 Most dependency findings are fixed by updating the affected package, or the package that pulls it in, and refreshing `bun.lock`. For a Semgrep finding that's a false positive, add a `// nosemgrep: <rule-id>` comment on the line with a short reason.
 

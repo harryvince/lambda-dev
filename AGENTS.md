@@ -4,16 +4,20 @@
 
 ## Commands
 
-Tooling is pinned in `mise.toml` (Node, Bun). Use Bun, not npm, for local work.
+Tooling is pinned in `mise.toml` (Node, Bun, uv, prek). Use Bun, not npm, for local work.
 
 ```bash
 mise install          # install toolchain
-mise run install      # bun install
-mise run check        # typecheck + test + build — run before finishing any change
+mise run install      # bun install + prek install (Git hooks)
+mise run fix          # oxlint --fix + oxfmt until stable
+mise run check        # format check + lint + typecheck + test + build — run before finishing any change
 mise run test         # vitest run
-mise run typecheck    # tsc --noEmit
+mise run typecheck    # tsc over src, test, and scripts
 mise run scan         # Trivy dependency scan + Semgrep code scan
+prek run --all-files  # every Git hook
 ```
+
+**The prek Git hooks are mandatory.** Every commit must pass `fix`, `lint`, `scan-deps`, and `scan-code` (see `.pre-commit-config.yaml`). Never use `git commit --no-verify`. If a hook fails, fix the cause; don't weaken the hook, the lint config, or a rule.
 
 Releases go through `mise run version` (standard-version: bumps `package.json`, writes `CHANGELOG.md`, tags and pushes); the pushed `v*` tag triggers `.github/workflows/publish.yml`, which publishes to npm. Don't run these, or edit `CHANGELOG.md` or the package version by hand, unless asked.
 
@@ -26,14 +30,17 @@ Releases go through `mise run version` (standard-version: bumps `package.json`, 
 | `src/config.ts`           | YAML loading (anchors/merge keys on, alias count capped) and the zod schema. `loadTarget` picks the target and defaults `build.outDir` to `.lambda-dev/<target>`. |
 | `src/build.ts`            | esbuild bundle to `index.js`, then zip with the sourcemap and copied assets into `function.zip`.                                                                  |
 | `src/copy.ts`             | Resolves and validates `build.copy` entries (files, directories, globs) into a manifest **before** the out dir is cleared.                                        |
+| `src/glob.ts`             | Shared glob helpers (`splitGlob`, `toUnixPath`); matching itself uses Node's `fs.glob` and `path.matchesGlob`.                                                    |
 | `src/aws.ts`              | `LambdaAdapter` interface and `AwsLambdaAdapter` (AWS SDK v3). Handles env read-merge-write with `RevisionId`, update waiters, upload, invoke.                    |
 | `src/environment.ts`      | Reserved env var names, patch merge logic, 4 KB limit check.                                                                                                      |
 | `src/watch.ts`            | chokidar watcher, include/exclude glob matching, `SerializedDebouncedRunner` (debounced, one deploy at a time, coalesces changes made mid-deploy).                |
 | `src/errors.ts`           | `LambdaDevError` with a `category` and optional `hint`.                                                                                                           |
+| `src/json.ts`             | `JsonValue` type and `parseJson`, used for invoke payloads.                                                                                                       |
 | `src/output.ts`           | Logger and `[target] stage: message` formatting.                                                                                                                  |
 | `src/scaffold.ts`         | Writes the starter config for `init`.                                                                                                                             |
 | `src/index.ts`            | Library re-exports.                                                                                                                                               |
 | `examples/lambda-dev.yml` | Example config shipped in the package.                                                                                                                            |
+| `tools/oxlint/anti-slop/` | Vendored anti-slop oxlint rules (owned here; provenance in `UPSTREAM.md`).                                                                                        |
 
 Tests live in `test/<module>.test.ts`, named after the source module they cover.
 
@@ -41,6 +48,7 @@ User documentation is a [Zensical](https://zensical.org) site: Markdown pages in
 
 ## Conventions
 
+- Lint is oxlint with the vendored anti-slop rules (`tools/oxlint/anti-slop/`, owned by this repo; see `UPSTREAM.md`). Parse external data at its boundary with zod or `parseJson` (`src/json.ts`) instead of `unknown` plus `typeof`. Only error-handling parameters may be `unknown`, and they're named `cause`. Every type assertion needs a `// SAFETY:` comment stating the invariant. Don't silence rules or add casts to pass lint.
 - ESM with `NodeNext` resolution: relative imports in `src/` must use the `.js` extension.
 - Strict TypeScript. Dependencies are pinned to exact versions; keep it that way.
 - Errors that reach the user must be `LambdaDevError` with one of the existing categories (`validation`, `build`, `aws_deploy`, `aws_configuration`, `aws_invoke`, `filesystem`, `unexpected`). Wrap unknown errors with `toLambdaDevError`. The README troubleshooting section is keyed by these categories.

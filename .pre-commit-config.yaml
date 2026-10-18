@@ -1,0 +1,35 @@
+# Git hooks run by prek (https://prek.j178.dev). Installed by `mise run install`; mandatory for all changes.
+# Every hook runs through mise so tool versions match mise.toml.
+default_install_hook_types: [pre-commit]
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      - id: fix
+        name: format and autofix (oxfmt + oxlint --fix)
+        entry: mise run fix
+        language: system
+        pass_filenames: false
+        files: \.(ts|js|mjs|cjs|json|jsonc|md|ya?ml)$
+
+      - id: lint
+        name: lint (oxlint + anti-slop)
+        entry: mise run lint
+        language: system
+        pass_filenames: false
+        files: \.(ts|js|mjs|cjs)$
+
+      - id: scan-deps
+        name: dependency vulnerabilities (Trivy)
+        entry: mise run scan:deps
+        language: system
+        pass_filenames: false
+        files: ^(package\.json|bun\.lock)$
+
+      - id: scan-code
+        name: code security (Semgrep)
+        entry: mise run scan:code
+        language: system
+        pass_filenames: false
+        files: \.(ts|js|mjs|cjs|ya?ml|json)$

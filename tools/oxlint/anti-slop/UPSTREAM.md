@@ -10,5 +10,6 @@
 
 - Removed `effect/`: this project doesn't use Effect, so the opt-in Effect rules are not installed.
 - Oxlint and `@oxlint/plugins` are pinned at 1.88.0 (upstream tested with 1.78.0).
+- `rules/require-safety-comment-for-type-assertion.ts`: added a `nosemgrep` comment on `markerPattern`'s `RegExp`, a Semgrep false positive (markers are escaped and come from the lint config).
 
 These files are vendored and owned by this repository. To pick up upstream changes, follow the upstream skill's update procedure (`skills/install-anti-slop/references/update.md`) rather than overwriting this directory.

@@ -29,9 +29,11 @@ Tool versions and project tasks are managed with mise. Normal development uses B
 
 ```bash
 mise install
-mise run install
+mise run install   # also installs the mandatory prek Git hooks
 mise run check
 ```
+
+Every commit must pass the prek hooks (oxfmt, oxlint with anti-slop rules, Trivy, and Semgrep). See [Contributing](https://harryvince.github.io/lambda-dev/contributing/).
 
 Useful tasks:
 
