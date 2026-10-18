@@ -72,9 +72,11 @@ export function createProgram(): Command {
     .option("--no-expect", "Don't compare the invoke response with invoke.expect")
     .option("--check", "Run the target's checks after uploading")
     .option("-y, --yes", "Deploy a protected target without asking")
+    .option("--no-rollback", "Keep the new code deployed when checks or invoke.expect fail")
     .action(async (target, options) => {
       await deployTarget({
         yes: options.yes,
+        rollback: options.rollback,
         configPath: options.config,
         targetName: target,
         invoke: options.invoke,

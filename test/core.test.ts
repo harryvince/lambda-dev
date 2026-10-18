@@ -893,3 +893,249 @@ describe("zip size", () => {
     expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
   });
 });
+
+describe("rollback when checks fail", () => {
+  const PREVIOUS = {
+    code: new Uint8Array([7, 7]),
+    codeSha256: sha256Base64(new Uint8Array([7, 7])),
+    environment: { PREVIOUS: "FAKE_PREVIOUS_VALUE" },
+  };
+
+  /** A target that has been deployed before, so the snapshot already exists. */
+  async function deployedChecksConfig(lambda: LambdaAdapter): Promise<string> {
+    const configPath = await checksConfig();
+    await deployTarget({
+      configPath,
+      logger: memoryLogger(),
+      deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+    });
+    vi.mocked(lambda.updateFunctionCode).mockClear();
+    vi.mocked(lambda.downloadFunction).mockClear().mockResolvedValue(PREVIOUS);
+
+    return configPath;
+  }
+
+  const failingHealth = () =>
+    vi
+      .fn()
+      .mockResolvedValueOnce({ statusCode: 200, payload: { ok: false } })
+      .mockResolvedValueOnce({ statusCode: 200, payload: { statusCode: 400 } });
+
+  it("puts back the code from before this deploy", async () => {
+    const lambda = fakeLambda();
+    const configPath = await deployedChecksConfig(lambda);
+    lambda.invokeFunction = failingHealth();
+    const logger = memoryLogger();
+
+    await expect(
+      deployTarget({
+        configPath,
+        check: true,
+        logger,
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({
+      category: "aws_invoke",
+      message: expect.stringContaining("1 of 2 checks failed"),
+      hint: expect.stringContaining("Rolled back"),
+    });
+
+    // The state is read before the upload, then its code is uploaded again after the failure.
+    expect(vi.mocked(lambda.downloadFunction).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(lambda.updateFunctionCode).mock.invocationCallOrder[0]!,
+    );
+    expect(vi.mocked(lambda.updateFunctionCode).mock.calls.map((call) => call[1])).toEqual([
+      built().artifactBytes,
+      PREVIOUS.code,
+    ]);
+    expect(lambda.restoreEnvironment).not.toHaveBeenCalled();
+    expect(lambda.waitForUpdate).toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[dev] rollback: Checks failed; restoring the code from before this deploy",
+    );
+    expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain("FAKE_PREVIOUS_VALUE");
+  });
+
+  it("uses the snapshot on a first deploy instead of reading the function twice", async () => {
+    const lambda = fakeLambda();
+    lambda.invokeFunction = failingHealth();
+
+    await expect(
+      deployTarget({
+        configPath: await checksConfig(),
+        check: true,
+        logger: memoryLogger(),
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({ hint: expect.stringContaining("Rolled back") });
+
+    expect(lambda.downloadFunction).toHaveBeenCalledOnce();
+    expect(vi.mocked(lambda.updateFunctionCode).mock.calls[1]?.[1]).toEqual(ORIGINAL_CODE);
+  });
+
+  it("restores the environment too when the deploy changed it, chaining the revision", async () => {
+    const lambda = fakeLambda();
+    const configPath = await checksConfig();
+    await writeFile(
+      configPath,
+      (await readFile(configPath, "utf8")).replace(
+        "    build:",
+        "    environment: { LOG_LEVEL: debug }\n    build:",
+      ),
+    );
+    lambda.updateEnvironment = vi
+      .fn()
+      .mockResolvedValue({ changed: true, updatedCount: 1, deletedCount: 0, revisionId: "rev-1" });
+    lambda.invokeFunction = failingHealth();
+
+    await expect(
+      deployTarget({
+        configPath,
+        check: true,
+        logger: memoryLogger(),
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({ hint: expect.stringContaining("Rolled back") });
+
+    expect(lambda.restoreEnvironment).toHaveBeenCalledWith(expect.anything(), {
+      ORIGINAL: "FAKE_SNAPSHOT_VALUE",
+    });
+    expect(vi.mocked(lambda.updateFunctionCode).mock.calls[1]).toEqual([
+      expect.anything(),
+      ORIGINAL_CODE,
+      "rev-9",
+    ]);
+  });
+
+  it("rolls back when invoke.expect fails after a deploy", async () => {
+    const lambda = fakeLambda();
+    const configPath = await writeProjectConfig(true);
+    await writeFile(
+      configPath,
+      `${await readFile(configPath, "utf8")}      expect:\n        payload: { ok: true }\n`,
+    );
+    lambda.invokeFunction = vi.fn().mockResolvedValue({ statusCode: 200, payload: { ok: false } });
+
+    await expect(
+      deployTarget({
+        configPath,
+        logger: memoryLogger(),
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({ hint: expect.stringContaining("Rolled back") });
+    expect(lambda.updateFunctionCode).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the new code with --no-rollback or rollbackOnFailure: false", async () => {
+    for (const [rollback, config] of [
+      [false, ""],
+      [undefined, "    rollbackOnFailure: false\n"],
+    ] as const) {
+      const lambda = fakeLambda();
+      const configPath = await deployedChecksConfig(lambda);
+      await writeFile(
+        configPath,
+        (await readFile(configPath, "utf8")).replace("    build:", `${config}    build:`),
+      );
+      lambda.invokeFunction = failingHealth();
+
+      await expect(
+        deployTarget({
+          configPath,
+          check: true,
+          rollback,
+          logger: memoryLogger(),
+          deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+        }),
+      ).rejects.toMatchObject({ hint: expect.stringContaining("The new code is still deployed") });
+      expect(lambda.downloadFunction).not.toHaveBeenCalled();
+      expect(lambda.updateFunctionCode).toHaveBeenCalledOnce();
+    }
+  });
+
+  it("doesn't roll back when invoking itself fails, or from watch", async () => {
+    const lambda = fakeLambda();
+    const configPath = await deployedChecksConfig(lambda);
+    lambda.invokeFunction = vi
+      .fn()
+      .mockRejectedValue(new LambdaDevError("aws_invoke", "Failed to invoke dev-function"));
+
+    await expect(
+      deployTarget({
+        configPath,
+        check: true,
+        logger: memoryLogger(),
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({ message: "Failed to invoke dev-function" });
+    expect(lambda.updateFunctionCode).toHaveBeenCalledOnce();
+
+    vi.mocked(lambda.downloadFunction).mockClear();
+    lambda.invokeFunction = failingHealth();
+    await expect(
+      deployTarget({
+        configPath,
+        check: true,
+        fromWatch: true,
+        logger: memoryLogger(),
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({ hint: expect.stringContaining("still deployed") });
+    expect(lambda.downloadFunction).not.toHaveBeenCalled();
+  });
+
+  it("says so when the rollback itself fails", async () => {
+    const lambda = fakeLambda();
+    const configPath = await deployedChecksConfig(lambda);
+    lambda.invokeFunction = failingHealth();
+    vi.mocked(lambda.updateFunctionCode)
+      .mockResolvedValueOnce({ functionName: "dev-function" })
+      .mockRejectedValueOnce(new LambdaDevError("aws_deploy", "Failed to upload dev-function"));
+
+    await expect(
+      deployTarget({
+        configPath,
+        check: true,
+        logger: memoryLogger(),
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({
+      category: "aws_deploy",
+      message: expect.stringContaining("and rolling back failed: Failed to upload dev-function"),
+      hint: expect.stringContaining("may still be deployed"),
+    });
+  });
+
+  it("doesn't read the function when nothing will be checked", async () => {
+    const lambda = fakeLambda();
+    const configPath = await deployedChecksConfig(lambda);
+
+    await deployTarget({
+      configPath,
+      logger: memoryLogger(),
+      deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+    });
+    expect(lambda.downloadFunction).not.toHaveBeenCalled();
+  });
+
+  it("stops before changing anything when the current state can't be read", async () => {
+    const lambda = fakeLambda();
+    const configPath = await deployedChecksConfig(lambda);
+    vi.mocked(lambda.downloadFunction).mockRejectedValue(
+      new LambdaDevError("aws_snapshot", "Failed to save the function's current code for rollback"),
+    );
+
+    await expect(
+      deployTarget({
+        configPath,
+        check: true,
+        logger: memoryLogger(),
+        deps: { lambda, buildArtifact: vi.fn().mockResolvedValue(built()) },
+      }),
+    ).rejects.toMatchObject({
+      category: "aws_snapshot",
+      hint: expect.stringContaining("--no-rollback"),
+    });
+    expect(lambda.updateFunctionCode).not.toHaveBeenCalled();
+  });
+});

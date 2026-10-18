@@ -89,6 +89,7 @@ A target is one Lambda function. Use several targets for several functions, or f
 | `profile` | No | Named profile from your AWS config. Without it, the default AWS SDK credential chain is used. |
 | `environment` | No | Environment variables to set or delete. See [Environment variables](environment-variables.md). |
 | `protected` | No | Default `false`. Ask before `deploy` or `rollback` changes this function, and refuse to `watch` it. See [Protected targets](#protected-targets). |
+| `rollbackOnFailure` | No | Default `true`. When `deploy`'s checks or `invoke.expect` fail, put back the code and environment from before that deploy. See [Automatic rollback](checks.md#automatic-rollback). |
 | `snapshot` | No | Default `true`. Save the function's code and environment before the first deploy, so [`rollback`](rollback.md) can restore them. |
 | `build` | Yes | See [`build`](#build). |
 | `watch` | No | See [`watch`](#watch). |

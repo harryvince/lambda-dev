@@ -39,7 +39,7 @@ Builds the target's zip into `build.outDir` without deploying it. Doesn't call A
 ## `deploy`
 
 ```bash
-aws-lambda-dev deploy [target] [-c lambda-dev.yml] [--invoke] [--payload-file <path>] [--payload-json <json>] [--no-cache] [--no-expect] [--check] [-y, --yes]
+aws-lambda-dev deploy [target] [-c lambda-dev.yml] [--invoke] [--payload-file <path>] [--payload-json <json>] [--no-cache] [--no-expect] [--check] [--no-rollback] [-y, --yes]
 ```
 
 Runs one cycle: build, sync environment variables (if configured), upload, optionally invoke, and optionally run [checks](checks.md).
@@ -52,6 +52,7 @@ Runs one cycle: build, sync environment variables (if configured), upload, optio
 | `--no-cache` | Build from scratch even if the [build cache](configuration.md#build-cache) has a match. |
 | `--no-expect` | Don't compare the invoke response with [`invoke.expect`](checks.md#checking-every-invoke). |
 | `--check` | After uploading (and invoking), run all of the target's [checks](checks.md). Fails before building if the target has none. |
+| `--no-rollback` | Keep the new code deployed when checks or `invoke.expect` fail. By default, the deploy is [rolled back](checks.md#automatic-rollback). |
 | `-y, --yes` | Deploy a [protected target](configuration.md#protected-targets) without asking. Needed for protected targets when there's no terminal, as in CI. |
 
 A zip over 40 MB logs a warning, because Lambda rejects direct uploads over 50 MB. A zip over 50 MB fails the deploy after the build, before anything in AWS changes.

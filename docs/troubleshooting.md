@@ -7,7 +7,7 @@ Errors are printed as `[category] message`, usually with a `Hint:` line. The cat
 | `validation` | Reading the config or choosing a target | No |
 | `filesystem` | Reading the config file | No |
 | `build` | esbuild, or copying files | No |
-| `aws_snapshot` | Saving the rollback snapshot before the first deploy | No |
+| `aws_snapshot` | Saving the rollback snapshot before the first deploy, or the current state before a checked deploy | No |
 | `aws_configuration` | Syncing environment variables, or waiting for an update | Possibly |
 | `aws_deploy` | Uploading code | Environment may have been updated |
 | `aws_invoke` | Invoking, or a response didn't match a check or `invoke.expect` | Code was uploaded (by `deploy`) |
@@ -44,7 +44,9 @@ The CLI couldn't save the function's current code and environment before its fir
 - The function is a container image, which this tool doesn't deploy.
 - The function's current code is over 50 MB zipped, more than `rollback` could upload.
 
-Fix the cause and deploy again, or set `snapshot: false` on the target to deploy without a snapshot. See [Rollback](rollback.md).
+The same causes apply when a deploy with checks or `invoke.expect` saves the function's current state for [automatic rollback](checks.md#automatic-rollback).
+
+Fix the cause and deploy again, or set `snapshot: false` on the target to deploy without a snapshot (and `--no-rollback` to deploy without an automatic rollback). See [Rollback](rollback.md).
 
 ## `aws_configuration`
 
@@ -68,7 +70,7 @@ The code upload failed. Usually credentials, region, function name, or a missing
 
 Invoking failed, usually because of a missing `lambda:InvokeFunction` permission. If the function ran and threw an error, that isn't reported here unless an expectation is set: the invoke summary shows `functionError Unhandled` instead.
 
-It's also reported when a response doesn't match a [check](checks.md) or `invoke.expect`. Each mismatch is printed with its location, such as `payload.statusCode: expected 200, received 500`. After `deploy`, the new code is already live; nothing is rolled back. If you're sending an event that should get a different response, pass `--no-expect`.
+It's also reported when a response doesn't match a [check](checks.md) or `invoke.expect`. Each mismatch is printed with its location, such as `payload.statusCode: expected 200, received 500`. After `deploy`, the function is [rolled back](checks.md#automatic-rollback) to how it was before that deploy, unless `--no-rollback` or `rollbackOnFailure: false` is set; the hint says which happened. If you're sending an event that should get a different response, pass `--no-expect`.
 
 ## Watch doesn't react to changes
 

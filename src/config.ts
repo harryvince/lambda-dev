@@ -184,6 +184,10 @@ const targetSchema = z
       description:
         "Ask for confirmation before deploy or rollback changes this function, and refuse to watch it. --yes skips the question.",
     }),
+    rollbackOnFailure: z.boolean().default(true).meta({
+      description:
+        "When deploy's checks or invoke.expect fail, put back the code and environment the function had before that deploy.",
+    }),
     snapshot: z.boolean().default(true).meta({
       description:
         "Save the function's code and environment before the first deploy, so rollback can restore them.",

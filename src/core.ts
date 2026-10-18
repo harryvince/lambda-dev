@@ -21,8 +21,9 @@ import {
   readSnapshot,
   snapshotDirectory,
   writeSnapshot,
+  type FunctionState,
 } from "./snapshot.js";
-import { LambdaDevError } from "./errors.js";
+import { LambdaDevError, toLambdaDevError } from "./errors.js";
 
 export interface RuntimeDeps {
   buildArtifact: (loaded: LoadedTarget) => Promise<BuildResult>;
@@ -48,8 +49,10 @@ export interface DeployOptions {
   check?: boolean;
   /** Deploy a protected target without asking. */
   yes?: boolean;
-  /** Set by watch: a protected target is refused instead of confirmed. */
+  /** Set by watch: a protected target is refused instead of confirmed, and nothing is rolled back. */
   fromWatch?: boolean;
+  /** false keeps the new code when checks fail, whatever rollbackOnFailure says. */
+  rollback?: boolean;
   logger: Logger;
   deps?: Partial<RuntimeDeps>;
 }
@@ -158,9 +161,25 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     );
   }
 
-  if (loaded.target.snapshot) {
-    await ensureSnapshot(loaded, deps, options.logger);
-  }
+  const shouldInvoke = options.invoke ?? loaded.target.invoke.afterDeploy;
+
+  const expectsResponse =
+    shouldInvoke && options.expect !== false && loaded.target.invoke.expect !== undefined;
+
+  const rollBackOnFailure =
+    (checks.length > 0 || expectsResponse) &&
+    !options.fromWatch &&
+    options.rollback !== false &&
+    loaded.target.rollbackOnFailure;
+
+  const snapshotted = loaded.target.snapshot
+    ? await ensureSnapshot(loaded, deps, options.logger)
+    : undefined;
+
+  // Before any change: what to put back if the new code fails its checks.
+  const previous = rollBackOnFailure
+    ? (snapshotted ?? (await savePreviousState(loaded, deps, options.logger)))
+    : undefined;
 
   let environment: EnvironmentUpdateResult | undefined;
 
@@ -207,13 +226,14 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     `Uploaded ${deploy.functionName}${deploy.version ? ` version ${deploy.version}` : ""}`,
   );
 
-  const shouldInvoke = options.invoke ?? loaded.target.invoke.afterDeploy;
-
   const summary: DeploySummary = { build, deploy };
 
   if (environment) {
     summary.environment = environment;
   }
+
+  // A response that doesn't match is a failure of the new code; an AWS error while invoking isn't.
+  let failure: LambdaDevError | undefined;
 
   if (shouldInvoke) {
     const payload = await resolvePayload(loaded, options.payloadFile, options.payloadJson);
@@ -223,15 +243,30 @@ export async function deployTarget(options: DeployOptions): Promise<DeploySummar
     summary.invoke = invoke;
 
     if (options.expect !== false) {
-      assertInvokeExpectation(loaded, invoke, options.logger);
+      failure = invokeExpectationFailure(loaded, invoke, options.logger);
     }
   }
 
-  if (checks.length > 0) {
+  if (!failure && checks.length > 0) {
     summary.checks = await runChecks(loaded, checks, deps, options.logger);
+    failure = checksFailure(loaded, summary.checks);
   }
 
-  return summary;
+  if (!failure) {
+    return summary;
+  }
+
+  if (!previous) {
+    throw new LambdaDevError(failure.category, failure.message, {
+      hint: `The new code is still deployed. ${failure.hint ?? ""}`.trim(),
+    });
+  }
+
+  await restorePreviousState(loaded, previous, environment, deps, options.logger, failure);
+
+  throw new LambdaDevError(failure.category, failure.message, {
+    hint: "Rolled back to the code and environment from before this deploy; each mismatch is logged above. Pass --no-rollback to keep the new code deployed.",
+  });
 }
 
 /** Invoke a target with each named check's event and compare the responses with what's expected. */
@@ -239,8 +274,14 @@ export async function checkTarget(options: CheckOptions): Promise<CheckResult[]>
   const loaded = await loadTarget(options.configPath, options.targetName);
   const deps = resolveDeps(options.deps);
   const checks = selectChecks(loaded, options.names ?? []);
+  const results = await runChecks(loaded, checks, deps, options.logger);
+  const failure = checksFailure(loaded, results);
 
-  return runChecks(loaded, checks, deps, options.logger);
+  if (failure) {
+    throw failure;
+  }
+
+  return results;
 }
 
 /** Put the function back to its snapshot from before the first deploy, then delete the snapshot. */
@@ -306,8 +347,11 @@ export async function invokeTarget(options: InvokeOptions): Promise<InvokeResult
   const result = await deps.lambda.invokeFunction(loaded, payload, loaded.target.invoke.logType);
   logStep(options.logger, loaded.targetName, "invoke", formatInvokeSummary(result));
 
-  if (options.expect !== false) {
-    assertInvokeExpectation(loaded, result, options.logger);
+  const failure =
+    options.expect === false ? undefined : invokeExpectationFailure(loaded, result, options.logger);
+
+  if (failure) {
+    throw failure;
   }
 
   return result;
@@ -479,7 +523,7 @@ function selectChecks(loaded: LoadedTarget, names: string[]): NamedCheck[] {
   });
 }
 
-/** Run every check, then fail if any of them didn't get the expected response. */
+/** Run every check, logging each result. Failures don't stop the remaining checks. */
 async function runChecks(
   loaded: LoadedTarget,
   checks: NamedCheck[],
@@ -507,24 +551,32 @@ async function runChecks(
     results.push({ name, invoke, mismatches });
   }
 
-  const failed = results.filter((result) => result.mismatches.length > 0);
-
-  if (failed.length > 0) {
-    throw new LambdaDevError(
-      "aws_invoke",
-      `${failed.length} of ${results.length} checks failed for ${loaded.target.functionName}: ${failed.map((result) => result.name).join(", ")}`,
-      { hint: "Each check's mismatches are logged above. Nothing was rolled back." },
-    );
-  }
-
   return results;
 }
 
-function assertInvokeExpectation(loaded: LoadedTarget, invoke: InvokeResult, logger: Logger): void {
+function checksFailure(loaded: LoadedTarget, results: CheckResult[]): LambdaDevError | undefined {
+  const failed = results.filter((result) => result.mismatches.length > 0);
+
+  if (failed.length === 0) {
+    return undefined;
+  }
+
+  return new LambdaDevError(
+    "aws_invoke",
+    `${failed.length} of ${results.length} checks failed for ${loaded.target.functionName}: ${failed.map((result) => result.name).join(", ")}`,
+    { hint: "Each check's mismatches are logged above." },
+  );
+}
+
+function invokeExpectationFailure(
+  loaded: LoadedTarget,
+  invoke: InvokeResult,
+  logger: Logger,
+): LambdaDevError | undefined {
   const expectation: Expectation | undefined = loaded.target.invoke.expect;
 
   if (!expectation) {
-    return;
+    return undefined;
   }
 
   const mismatches = findMismatches(expectation, invoke);
@@ -532,23 +584,24 @@ function assertInvokeExpectation(loaded: LoadedTarget, invoke: InvokeResult, log
   if (mismatches.length === 0) {
     logStep(logger, loaded.targetName, "invoke", "Response matches invoke.expect");
 
-    return;
+    return undefined;
   }
 
-  throw new LambdaDevError(
+  return new LambdaDevError(
     "aws_invoke",
     `${loaded.target.functionName} didn't respond as invoke.expect describes: ${mismatches.join("; ")}`,
     { hint: "Pass --no-expect to invoke without checking the response." },
   );
 }
 
+/** Take the first-deploy snapshot if there isn't one, returning the state it saved. */
 async function ensureSnapshot(
   loaded: LoadedTarget,
   deps: RuntimeDeps,
   logger: Logger,
-): Promise<void> {
+): Promise<FunctionState | undefined> {
   if (await hasSnapshot(loaded)) {
-    return;
+    return undefined;
   }
 
   logStep(
@@ -564,6 +617,80 @@ async function ensureSnapshot(
     loaded.targetName,
     "snapshot",
     `Saved to ${path.relative(loaded.projectRoot, directory)}`,
+  );
+
+  return state;
+}
+
+/** Read the function's current code and environment, kept in memory only, for a failed-check rollback. */
+async function savePreviousState(
+  loaded: LoadedTarget,
+  deps: RuntimeDeps,
+  logger: Logger,
+): Promise<FunctionState> {
+  logStep(
+    logger,
+    loaded.targetName,
+    "rollback",
+    "Saving the current code and environment, to restore if checks fail",
+  );
+
+  try {
+    return await deps.lambda.downloadFunction(loaded);
+  } catch (error) {
+    const cause = toLambdaDevError("aws_snapshot", "Failed to save the function's state", error);
+
+    throw new LambdaDevError(cause.category, cause.message, {
+      cause,
+      hint: "Nothing was changed. Allow lambda:GetFunction, or pass --no-rollback (or set rollbackOnFailure: false) to deploy without an automatic rollback.",
+    });
+  }
+}
+
+/** Put back the code, and the environment if this deploy changed it, from before this deploy. */
+async function restorePreviousState(
+  loaded: LoadedTarget,
+  previous: FunctionState,
+  environment: EnvironmentUpdateResult | undefined,
+  deps: RuntimeDeps,
+  logger: Logger,
+  failure: LambdaDevError,
+): Promise<void> {
+  const environmentChanged = environment?.changed === true;
+  warnStep(
+    logger,
+    loaded.targetName,
+    "rollback",
+    `Checks failed; restoring the code${environmentChanged ? " and environment" : ""} from before this deploy`,
+  );
+
+  try {
+    let revisionId: string | undefined;
+
+    if (environmentChanged) {
+      revisionId = (await deps.lambda.restoreEnvironment(loaded, previous.environment)).revisionId;
+    }
+
+    await deps.lambda.updateFunctionCode(loaded, previous.code, revisionId);
+    await deps.lambda.waitForUpdate(loaded);
+  } catch (error) {
+    const cause = toLambdaDevError("aws_deploy", "Rollback failed", error);
+
+    throw new LambdaDevError(
+      "aws_deploy",
+      `${failure.message}, and rolling back failed: ${cause.message}`,
+      {
+        cause,
+        hint: "The new code may still be deployed. Check the function, then deploy a known-good version.",
+      },
+    );
+  }
+
+  logStep(
+    logger,
+    loaded.targetName,
+    "rollback",
+    "Restored the function to how it was before this deploy",
   );
 }
 

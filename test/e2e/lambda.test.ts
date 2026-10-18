@@ -156,6 +156,25 @@ describe("against a local Lambda emulator", () => {
     ).rejects.toMatchObject({ category: "aws_invoke" });
   });
 
+  it("puts back the previous code when a deploy's checks fail", async () => {
+    const handler = path.join(path.dirname(configPath), "src", "handler.ts");
+    await writeFile(handler, DEV_HANDLER.replace('version: "dev"', 'version: "broken"'));
+
+    try {
+      await expect(
+        deployTarget({ configPath, check: true, logger: memoryLogger() }),
+      ).rejects.toMatchObject({
+        category: "aws_invoke",
+        hint: expect.stringContaining("Rolled back"),
+      });
+    } finally {
+      await writeFile(handler, DEV_HANDLER);
+    }
+
+    const invoked = await invokeTarget({ configPath, logger: memoryLogger() });
+    expect(invoked.payload).toMatchObject({ version: "dev", flag: "dev" });
+  });
+
   it("rolls back the code and environment, then deletes the snapshot", async () => {
     const summary = await rollbackTarget({ configPath, logger: memoryLogger() });
 

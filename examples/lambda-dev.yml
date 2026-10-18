@@ -46,6 +46,7 @@ targets:
       # expect:
       #   payload: { statusCode: 200 }
     # Named checks for deployment validation: `check dev` or `deploy dev --check`.
+    # If they fail after a deploy, it's rolled back unless rollbackOnFailure: false.
     # checks:
     #   health:
     #     payloadJson: { rawPath: /health }

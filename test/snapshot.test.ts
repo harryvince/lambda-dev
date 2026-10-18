@@ -72,6 +72,7 @@ async function target(functionName: string): Promise<LoadedTarget> {
       functionName,
       region: "eu-west-2",
       protected: false,
+      rollbackOnFailure: true,
       snapshot: true,
       build: {
         entry: "handler.ts",

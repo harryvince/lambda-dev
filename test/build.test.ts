@@ -23,6 +23,7 @@ describe("buildArtifact", () => {
         functionName: "dev-function",
         region: "eu-west-2",
         protected: false,
+        rollbackOnFailure: true,
         snapshot: true,
         build: {
           entry: "handler.ts",

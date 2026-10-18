@@ -80,6 +80,11 @@
             "description": "Ask for confirmation before deploy or rollback changes this function, and refuse to watch it. --yes skips the question.",
             "type": "boolean"
           },
+          "rollbackOnFailure": {
+            "default": true,
+            "description": "When deploy's checks or invoke.expect fail, put back the code and environment the function had before that deploy.",
+            "type": "boolean"
+          },
           "snapshot": {
             "default": true,
             "description": "Save the function's code and environment before the first deploy, so rollback can restore them.",
