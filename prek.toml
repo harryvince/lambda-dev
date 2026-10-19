@@ -1,0 +1,58 @@
+# Git hooks run by prek (https://prek.j178.dev). Installed by `mise run install`; mandatory for all changes.
+# The oxlint and oxfmt revs must match their versions in package.json (test/tooling.test.ts checks this).
+default_install_hook_types = ["pre-commit"]
+fail_fast = false
+
+[[repos]]
+repo = "https://github.com/oxc-project/mirrors-oxlint"
+rev = "v1.88.0"
+
+[[repos.hooks]]
+id = "oxlint"
+name = "lint (oxlint + anti-slop)"
+# Autofixes what it can; the commit stops if it changed files or errors remain.
+args = ["--fix"]
+
+[[repos]]
+repo = "https://github.com/oxc-project/mirrors-oxfmt"
+rev = "v0.73.0"
+
+[[repos.hooks]]
+id = "oxfmt"
+name = "format (oxfmt)"
+args = ["--no-error-on-unmatched-pattern"]
+types_or = ["javascript", "jsx", "ts", "tsx", "json", "markdown", "yaml", "toml"]
+
+[[repos]]
+repo = "https://github.com/semgrep/pre-commit"
+rev = "v1.181.0"
+
+[[repos.hooks]]
+id = "semgrep"
+name = "code security (Semgrep)"
+# Same Python as `mise run scan:code`; prek fetches it with uv if it isn't installed.
+language_version = "3.14.8"
+# The same rulesets as `mise run scan:code`; --error fails the commit on any finding.
+args = [
+  "--disable-version-check",
+  "--quiet",
+  "--skip-unknown-extensions",
+  "--metrics=off",
+  "--error",
+  "--config=p/default",
+  "--config=p/typescript",
+  "--config=p/nodejs",
+  "--config=p/github-actions",
+]
+
+# Trivy publishes no pre-commit hook, so it runs through mise at the version pinned in mise.toml.
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "trivy"
+name = "dependency vulnerabilities (Trivy)"
+entry = "mise run scan:deps"
+language = "system"
+pass_filenames = false
+files = '^(package\.json|bun\.lock)$'

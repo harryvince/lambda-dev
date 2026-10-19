@@ -13,16 +13,18 @@ mise run install   # installs dependencies and the Git hooks
 
 ## Git hooks (mandatory)
 
-Every commit must pass the [prek](https://prek.j178.dev) hooks in `.pre-commit-config.yaml`. `mise run install` installs them; if you cloned before they existed, run `prek install` once.
+Every commit must pass the [prek](https://prek.j178.dev) hooks in `prek.toml`. `mise run install` installs them; if you cloned before they existed, run `prek install` once.
 
-| Hook | Runs | When |
+| Hook | Source | Runs on |
 | --- | --- | --- |
-| `fix` | oxfmt and `oxlint --fix` | any code, JSON, Markdown, or YAML change |
-| `lint` | oxlint with the [anti-slop](#lint-rules) rules | any code change |
-| `scan-deps` | Trivy (`mise run scan:deps`) | `package.json` or `bun.lock` changes |
-| `scan-code` | Semgrep (`mise run scan:code`) | any code, JSON, or YAML change |
+| `oxlint` | [oxc-project/mirrors-oxlint](https://github.com/oxc-project/mirrors-oxlint), with `--fix` and the [anti-slop](#lint-rules) rules | staged JavaScript and TypeScript files |
+| `oxfmt` | [oxc-project/mirrors-oxfmt](https://github.com/oxc-project/mirrors-oxfmt) | staged code, JSON, Markdown, YAML, and TOML files |
+| `semgrep` | [semgrep/pre-commit](https://github.com/semgrep/pre-commit), same rulesets as `mise run scan:code` | staged files Semgrep understands |
+| `trivy` | local: `mise run scan:deps` (Trivy publishes no hook) | the whole lockfile, when `package.json` or `bun.lock` changes |
 
-If `fix` changes files, the commit stops so you can review and stage them; commit again. Fix anything `lint` or the scans report rather than skipping it. **Don't bypass the hooks with `git commit --no-verify`.** To run every hook on the whole repository:
+prek installs each upstream hook in its own cached environment the first time it runs, so the first commit is slower. The `oxlint` and `oxfmt` `rev`s must match the versions in `package.json`; a test fails if they drift, so update both together.
+
+If `oxlint` or `oxfmt` changes files, the commit stops so you can review and stage them; commit again. Fix anything `oxlint` or the scans report rather than skipping it. **Don't bypass the hooks with `git commit --no-verify`.** To run every hook on the whole repository:
 
 ```bash
 prek run --all-files
